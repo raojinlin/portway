@@ -74,7 +74,7 @@ node scripts/desktop.mjs --installer
 
 ## CI
 
-`.github/workflows/desktop.yml` 使用原生 macOS、Windows、Ubuntu runner 测试并生成安装包，上传为 Actions artifacts；可手动运行或推送 `v*` 标签触发。它不会自动发布 GitHub Release，也没有签名凭据。
+`.github/workflows/desktop.yml` 使用原生 macOS、Windows、Ubuntu runner 测试并生成桌面安装包与 `portway` 命令行程序，上传为 `portway-*` Actions artifacts；macOS CLI 是 amd64/arm64 universal binary，Windows 和 Linux CLI 是 amd64。workflow 可手动运行或推送 `v*` 标签触发，不会自动发布 GitHub Release，也没有签名凭据。
 
 本地可以验证后端与桌面传输（不会启动 GUI）：
 

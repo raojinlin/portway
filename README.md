@@ -18,8 +18,8 @@
 
 ## 架构
 - `cmd/tunnel`：CLI 入口。
-  - `tunnel daemon`：启动常驻进程（HTTP API + Web UI），阻塞运行，`Ctrl+C` 优雅退出。
-  - `tunnel add/list/status/rm/start/stop`：通过 HTTP 调用 daemon 的 API，本身不持有任何隧道状态。
+  - `portway daemon`：启动常驻进程（HTTP API + Web UI），阻塞运行，`Ctrl+C` 优雅退出。
+  - `portway add/list/status/rm/start/stop`：通过 HTTP 调用 daemon 的 API，本身不持有任何隧道状态。
 - `internal/tunnel`：核心隧道逻辑。
   - `Config` 描述单个隧道（转发模式 `Direction`、本地/远程监听、SSH 目标/用户/认证、转发目标、keepalive、重连、known_hosts）。
   - `Instance` 负责 SSH 拨号（含 known_hosts 校验）、按 `Direction` 建立监听与目标拨号、双向转发、指标统计、保活、断线重连。
@@ -42,17 +42,17 @@
    ```
 2. 打开 Web 管理页面：`http://127.0.0.1:7777/`，默认只显示线路列表，点右上角"添加线路"弹窗新建；可在页面上新增、编辑、删除、启停隧道并查看实时状态。编辑运行中的线路会立即按新配置重启，密码留空则保留原密码。
 3. 或者用 CLI 操作（默认连接 `127.0.0.1:7777`，可用 `--addr` 或环境变量 `TUNNEL_DAEMON_ADDR` 覆盖）：
-   - 本地转发（ssh config）：`tunnel add --name demo --local 127.0.0.1:8080 --ssh hostAlias --ssh-config ~/.ssh/config --forward 10.0.0.1:80`
-   - 本地转发（显式指定）：`tunnel add --name demo --local 127.0.0.1:8080 --ssh host:22 --user user --key ~/.ssh/id_rsa --forward 10.0.0.1:80`
-   - 远程转发：`tunnel add --name expose --direction remote --ssh host:22 --user user --remote-listen 0.0.0.0:9000 --forward 127.0.0.1:3000`
-   - 动态转发 / SOCKS5：`tunnel add --name proxy --direction dynamic --local 127.0.0.1:1080 --ssh host:22 --user user`
-   - 列表：`tunnel list`
-   - 状态：`tunnel status demo`
-   - 停止（保留配置）：`tunnel stop demo`
-   - 重新启动：`tunnel start demo`
-   - 删除：`tunnel rm demo`
+   - 本地转发（ssh config）：`portway add --name demo --local 127.0.0.1:8080 --ssh hostAlias --ssh-config ~/.ssh/config --forward 10.0.0.1:80`
+   - 本地转发（显式指定）：`portway add --name demo --local 127.0.0.1:8080 --ssh host:22 --user user --key ~/.ssh/id_rsa --forward 10.0.0.1:80`
+   - 远程转发：`portway add --name expose --direction remote --ssh host:22 --user user --remote-listen 0.0.0.0:9000 --forward 127.0.0.1:3000`
+   - 动态转发 / SOCKS5：`portway add --name proxy --direction dynamic --local 127.0.0.1:1080 --ssh host:22 --user user`
+   - 列表：`portway list`
+   - 状态：`portway status demo`
+   - 停止（保留配置）：`portway stop demo`
+   - 重新启动：`portway start demo`
+   - 删除：`portway rm demo`
 
-若命令连不上 daemon，会提示：`无法连接到守护进程，请先运行: tunnel daemon`。
+若命令连不上 daemon，会提示：`无法连接到守护进程，请先运行: portway daemon`。
 
 ## SSH 跳板连接
 
@@ -98,7 +98,7 @@ Host drop
 ## 运行与测试
 - 桌面版（macOS / Windows / Linux）：`make desktop`；macOS 通用包 `make desktop-universal`。复用现有界面，macOS 提供菜单栏常驻。构建依赖、安装包和退出行为见 [桌面版说明](desktop/README.md)。
 - 构建前端（首次 / `web/` 有改动时必需）：`make web`（或 `cd web && npm install && npm run build`）
-- 构建：`make build`（先构建前端，再执行 `go build -o tunnel ./cmd/tunnel`），在项目根目录生成包含前端资源的 `tunnel` 可执行文件。可用 `make build BINARY=其他路径` 指定输出位置；前端已构建过、只想编译 Go 侧时可直接执行 `go build -o tunnel ./cmd/tunnel`。
+- 构建：`make build`（先构建前端，再执行 `go build -o portway ./cmd/tunnel`），在项目根目录生成包含前端资源的 `portway` 可执行文件。可用 `make build BINARY=其他路径` 指定输出位置；前端已构建过、只想编译 Go 侧时可直接执行 `go build -o portway ./cmd/tunnel`。
 - 运行 daemon：`make run`（或 `go run ./cmd/tunnel daemon`，前提是 `internal/daemon/webui/dist` 已经是最新构建）
 - 测试：`make test`（等价于 `go test ./...`；前端目前没有单测）
 
@@ -108,13 +108,13 @@ Host drop
 
 ```bash
 # 默认：启停、线路恢复、SSH 建连结果、重连次数/等待时间、请求失败
-./tunnel daemon
+./portway daemon
 
 # 排查：增加认证准备、传输/握手阶段、逐连接建立/结束、耗时和流量
-./tunnel daemon --log-level debug
+./portway daemon --log-level debug
 
 # 机器可读，每行一个 JSON 对象，便于日志采集
-./tunnel daemon --log-level debug --log-format json
+./portway daemon --log-level debug --log-format json
 ```
 
 `--log-level` 支持 `debug`、`info`、`warn`、`error`，`--log-format` 支持 `text`、`json`。成功的页面 GET 轮询只在 debug 记录；配置修改、启动/停止等 API 操作在 info 记录，4xx/5xx 分别记为 warn/error。SOCKS5 单个目标失败记录 warn，不改变整条线路状态。
@@ -132,7 +132,7 @@ SOCKS5 连接历史独立写入 `logs/connections.jsonl`，不受 `log_level` �
 默认读取 `~/.config/ssh-tunnel-manager/config.yaml`；设置 `XDG_CONFIG_HOME` 时，配置、默认状态和日志路径均位于 `$XDG_CONFIG_HOME/ssh-tunnel-manager/`。默认配置文件不存在时使用内置默认值，首次页面保存时创建。也可指定现有文件：
 
 ```bash
-./tunnel daemon --config /path/to/config.yaml
+./portway daemon --config /path/to/config.yaml
 ```
 
 示例（相对路径以 YAML 文件所在目录为基准，支持 `~/`）：

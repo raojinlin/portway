@@ -1,5 +1,7 @@
 /tunnel
 /tunnel.exe
+/portway
+/portway.exe
 /web/node_modules/
 /internal/daemon/webui/dist/
 /dist/

@@ -65,7 +65,7 @@ func newClient(addr string) *apiclient.Client {
 
 func fail(err error) {
 	if errors.Is(err, apiclient.ErrDaemonUnreachable) {
-		fmt.Fprintln(os.Stderr, "无法连接到守护进程，请先运行: tunnel daemon")
+		fmt.Fprintln(os.Stderr, "无法连接到守护进程，请先运行: portway daemon")
 		fmt.Fprintln(os.Stderr, "详情:", err)
 	} else {
 		fmt.Fprintln(os.Stderr, "错误:", err)
@@ -215,7 +215,7 @@ func stopCmd(args []string) {
 }
 
 func usage() {
-	fmt.Println("tunnel <daemon|add|list|status|rm|start|stop> [flags]")
+	fmt.Println("portway <daemon|add|list|status|rm|start|stop> [flags]")
 	fmt.Println()
 	fmt.Println("daemon flags:")
 	fmt.Println("  --config <path>        YAML configuration file")

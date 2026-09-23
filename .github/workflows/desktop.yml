@@ -1,4 +1,4 @@
-name: Desktop Packages
+name: Desktop and CLI Packages
 
 on:
   workflow_dispatch:
@@ -6,9 +6,11 @@ on:
     tags: ['v*']
   pull_request:
     paths:
+      - 'cmd/**'
       - 'desktop/**'
       - 'internal/**'
       - 'web/**'
+      - 'scripts/cli.mjs'
       - 'scripts/desktop.mjs'
       - 'tools/desktopicon/**'
       - 'go.*'
@@ -26,12 +28,15 @@ jobs:
           - os: macos-latest
             name: macos-universal
             arguments: '--universal --dmg'
+            cli_arguments: '--universal'
           - os: windows-latest
             name: windows-amd64
             arguments: '--installer'
+            cli_arguments: ''
           - os: ubuntu-24.04
             name: linux-amd64
             arguments: ''
+            cli_arguments: ''
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +67,8 @@ jobs:
           npm --prefix web run build
       - name: Test backend
         run: go test ./...
+      - name: Build command-line app
+        run: node scripts/cli.mjs ${{ matrix.cli_arguments }}
       - name: Install desktop tooling
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
       - name: Test desktop backend
@@ -74,6 +81,8 @@ jobs:
         run: node scripts/desktop.mjs ${{ matrix.arguments }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ssh-tunnel-manager-${{ matrix.name }}
-          path: dist/desktop/*
+          name: portway-${{ matrix.name }}
+          path: |
+            dist/desktop/*
+            dist/cli/*
           if-no-files-found: error

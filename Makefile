@@ -1,6 +1,6 @@
 .PHONY: web build desktop desktop-tools desktop-universal desktop-dmg test run
 
-BINARY ?= tunnel
+BINARY ?= portway
 
 # Builds the React/antd frontend (web/) into internal/daemon/webui/dist,
 # which is what go:embed picks up. Required before `go build` on a clean
