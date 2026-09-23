@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Portway",
+  "outputfilename": "ssh-tunnel-manager",
+  "frontend:dir": "../web",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "author": { "name": "SSH Tunnel Manager" },
+  "info": {
+    "companyName": "SSH Tunnel Manager",
+    "productName": "Portway",
+    "productVersion": "0.1.0",
+    "copyright": "SSH Tunnel Manager",
+    "comments": "SSH forwarding desktop manager"
+  }
+}

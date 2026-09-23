@@ -1,0 +1,13 @@
+/tunnel
+/tunnel.exe
+/web/node_modules/
+/internal/daemon/webui/dist/
+/dist/
+/desktop/build/bin/
+/desktop/build/appicon.png
+/desktop/build/windows/
+/desktop/build/README.md
+/desktop/build/darwin/Info.dev.plist
+/desktop/wailsjs/
+/web/wailsjs/
+/desktop/*.syso
