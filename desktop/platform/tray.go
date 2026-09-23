@@ -12,6 +12,7 @@ type TraySnapshot struct {
 
 type TrayLine struct {
 	Name    string   `json:"name"`
+	State   string   `json:"state"`
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
 }

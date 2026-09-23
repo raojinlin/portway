@@ -390,7 +390,7 @@ func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPop
 		}
 		popup.lines[line.Name] = windowsLineMenu{position: uintptr(3 + i), submenu: submenu, details: len(line.Details)}
 		for _, detail := range line.Details {
-			if err = appendWindowsMenu(submenu, mfDisabled, 0, detail); err != nil {
+			if err = appendWindowsMenu(submenu, 0, 0, detail); err != nil {
 				return nil, err
 			}
 		}
@@ -432,7 +432,7 @@ func (p *windowsTrayPopup) refresh(snapshot TraySnapshot) {
 			if i < len(line.Details) {
 				text = line.Details[i]
 			}
-			updateWindowsMenu(menu.submenu, uintptr(i), mfDisabled, 0, text)
+			updateWindowsMenu(menu.submenu, uintptr(i), 0, 0, text)
 		}
 	}
 }

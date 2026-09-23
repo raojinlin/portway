@@ -94,6 +94,12 @@ func TestTrayStatesRoutesAndTotals(t *testing.T) {
 	if !strings.Contains(result.Traffic, "3.0 KiB/s") || !strings.Contains(result.Traffic, "5 连接") {
 		t.Fatal(result.Traffic)
 	}
+	wantStates := []string{"running", "running", "starting", "error", "stopped"}
+	for i, want := range wantStates {
+		if result.Lines[i].State != want {
+			t.Fatalf("line %d state = %q; want %q", i, result.Lines[i].State, want)
+		}
+	}
 	if !strings.Contains(strings.Join(result.Lines[1].Details, "\n"), "远程监听：0.0.0.0:80") {
 		t.Fatal(result.Lines[1])
 	}

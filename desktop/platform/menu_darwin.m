@@ -16,6 +16,7 @@ static NSMenuItem *summaryItem;
 static NSMenuItem *trafficItem;
 static NSMenuItem *emptyItem;
 static NSMutableDictionary<NSString *, NSMenuItem *> *lineItems;
+static NSMutableDictionary<NSString *, NSImage *> *stateImages;
 static NSString *trayName;
 
 static NSString *stmMenuText(NSString *value) {
@@ -23,6 +24,24 @@ static NSString *stmMenuText(NSString *value) {
     if (singleLine.length <= 120) return singleLine;
     NSRange range = [singleLine rangeOfComposedCharacterSequencesForRange:NSMakeRange(0, 120)];
     return [[singleLine substringWithRange:range] stringByAppendingString:@"\u2026"];
+}
+
+static NSImage *stmStateImage(NSString *state) {
+    if (![state isKindOfClass:NSString.class]) state = @"stopped";
+    NSImage *cached = stateImages[state];
+    if (cached != nil) return cached;
+    NSColor *color = NSColor.systemGrayColor;
+    if ([state isEqualToString:@"running"]) color = NSColor.systemGreenColor;
+    else if ([state isEqualToString:@"starting"]) color = NSColor.systemOrangeColor;
+    else if ([state isEqualToString:@"error"]) color = NSColor.systemRedColor;
+    NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(10, 10)];
+    [image lockFocus];
+    [color setFill];
+    [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(1, 1, 8, 8)] fill];
+    [image unlockFocus];
+    image.template = NO;
+    stateImages[state] = image;
+    return image;
 }
 
 void stmSetAppearance(int dark, int followSystem) {
@@ -83,6 +102,7 @@ int stmTrayStart(const char *value) {
         emptyItem.enabled = NO;
         [menu addItem:emptyItem];
         lineItems = [NSMutableDictionary new];
+        stateImages = [NSMutableDictionary new];
         [menu addItem:[NSMenuItem separatorItem]];
         NSArray<NSString *> *titles = @[
             [@"Open " stringByAppendingString:name], @"Open Configuration Folder", [@"Quit " stringByAppendingString:name]
@@ -144,12 +164,13 @@ void stmTrayUpdate(const char *value) {
             }
             index++;
             item.title = line[@"title"];
+            item.image = stmStateImage(line[@"state"]);
             item.toolTip = name;
             NSArray<NSString *> *details = line[@"details"];
             while (item.submenu.numberOfItems > details.count) [item.submenu removeItemAtIndex:item.submenu.numberOfItems - 1];
             while (item.submenu.numberOfItems < details.count) {
                 NSMenuItem *detail = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
-                detail.enabled = NO;
+                detail.enabled = YES;
                 [item.submenu addItem:detail];
             }
             for (NSInteger i = 0; i < details.count; i++) {
@@ -169,6 +190,7 @@ void stmTrayStop(void) {
         trafficItem = nil;
         emptyItem = nil;
         lineItems = nil;
+        stateImages = nil;
         trayName = nil;
         menuTarget = nil;
     });

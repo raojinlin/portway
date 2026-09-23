@@ -43,6 +43,7 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 		rates := trayRates(inRate, outRate, sampled)
 		line := platform.TrayLine{
 			Name:  view.Name,
+			State: state,
 			Title: fmt.Sprintf("%s · %s   %s", trayShort(view.Name, 28), label, rates),
 			Details: []string{
 				"线路：" + view.Name,
