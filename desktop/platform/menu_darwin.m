@@ -45,7 +45,7 @@ static NSImage *stmStateImage(NSString *state) {
 }
 
 static void stmUpdateDetailsView(NSView *view, NSArray<NSString *> *details) {
-    const CGFloat width = 380;
+    const CGFloat width = 300;
     const CGFloat rowHeight = 22;
     const CGFloat padding = 10;
     CGFloat height = padding * 2 + rowHeight * details.count;
@@ -64,11 +64,11 @@ static void stmUpdateDetailsView(NSView *view, NSArray<NSString *> *details) {
         CGFloat y = height - padding - 17 - rowHeight * i;
         NSTextField *keyLabel = (NSTextField *)view.subviews[i * 2];
         keyLabel.stringValue = key;
-        keyLabel.frame = NSMakeRect(14, y, 76, 17);
+        keyLabel.frame = NSMakeRect(14, y, 66, 17);
         keyLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
         NSTextField *valueLabel = (NSTextField *)view.subviews[i * 2 + 1];
         valueLabel.stringValue = value;
-        valueLabel.frame = NSMakeRect(94, y, 272, 17);
+        valueLabel.frame = NSMakeRect(84, y, 202, 17);
         valueLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
         valueLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         valueLabel.toolTip = details[i];
