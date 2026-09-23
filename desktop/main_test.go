@@ -45,7 +45,7 @@ func TestNativeMenusStartWithoutDOMReady(t *testing.T) {
 	}
 	select {
 	case value := <-updates:
-		if value.Summary != "运行 0 · 连接中 0 · 异常 0 · 停止 0" || len(value.Lines) != 0 {
+		if value.Summary != "暂无线路" || len(value.Lines) != 0 {
 			t.Fatalf("unexpected menu summary: %+v", value)
 		}
 	case <-time.After(time.Second):

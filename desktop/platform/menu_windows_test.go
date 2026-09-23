@@ -40,8 +40,15 @@ func TestWindowsTrayPopupRefresh(t *testing.T) {
 		trayUser32.NewProc("GetMenuStringW").Call(menu, position, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)), mfByPosition)
 		return windows.UTF16ToString(buffer)
 	}
+	state := func(menu, position uintptr) uintptr {
+		value, _, _ := trayUser32.NewProc("GetMenuState").Call(menu, position, mfByPosition)
+		return value
+	}
 	if got := read(popup.handle, 3); got != "test&&line running" {
 		t.Fatalf("wrong menu label: %q", got)
+	}
+	if state(popup.handle, 0)&mfDisabled != 0 || state(line.submenu, 0)&mfDisabled != 0 {
+		t.Fatal("statistics or line details use disabled text styling")
 	}
 	snapshot.Traffic = "2048 B/s"
 	snapshot.Lines[0].Details[0] = "RX 2048 B"

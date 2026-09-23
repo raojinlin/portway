@@ -24,7 +24,7 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 	seconds := now.Sub(s.at).Seconds()
 	for _, view := range views {
 		next[view.Name] = view
-		state, label := trayState(view.State)
+		state := trayState(view.State)
 		counts[state]++
 		connections += int64(view.ActiveConns)
 		var inRate, outRate float64
@@ -44,11 +44,8 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 		line := platform.TrayLine{
 			Name:  view.Name,
 			State: state,
-			Title: fmt.Sprintf("%s · %s   %s", trayShort(view.Name, 28), label, rates),
+			Title: fmt.Sprintf("%s   %s", trayShort(view.Name, 28), rates),
 			Details: []string{
-				"线路：" + view.Name,
-				"状态：" + label,
-				"速率：" + rates,
 				fmt.Sprintf("累计：↓ %s  ↑ %s", trayBytes(float64(view.BytesIn)), trayBytes(float64(view.BytesOut))),
 				fmt.Sprintf("当前连接：%d", view.ActiveConns),
 			},
@@ -64,27 +61,36 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 		if view.LastError != "" {
 			line.Details = append(line.Details, "最近错误："+view.LastError)
 		}
-		line.Details = append(line.Details, "速率为采样间隔平均值；累计流量在线路重启后清零")
 		result.Lines = append(result.Lines, line)
 	}
-	result.Summary = fmt.Sprintf("运行 %d · 连接中 %d · 异常 %d · 停止 %d", counts["running"], counts["starting"], counts["error"], counts["stopped"])
+	result.Summary = traySummary(counts)
 	result.Traffic = fmt.Sprintf("合计 %s · %d 连接", trayRates(totalIn, totalOut, allSampled), connections)
 	s.at, s.previous = now, next
 	return result
 }
 
-func trayState(state string) (string, string) {
+func traySummary(counts map[string]int) string {
+	parts := make([]string, 0, 4)
+	for _, item := range []struct {
+		state string
+		label string
+	}{{"running", "运行"}, {"starting", "连接中"}, {"error", "异常"}, {"stopped", "停止"}} {
+		if count := counts[item.state]; count > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d", item.label, count))
+		}
+	}
+	if len(parts) == 0 {
+		return "暂无线路"
+	}
+	return strings.Join(parts, " · ")
+}
+
+func trayState(state string) string {
 	switch state {
-	case "running":
-		return state, "运行中"
-	case "starting":
-		return state, "连接中"
-	case "error":
-		return state, "异常"
-	case "stopping":
-		return "stopped", "停止中"
+	case "running", "starting", "error":
+		return state
 	default:
-		return "stopped", "已停止"
+		return "stopped"
 	}
 }
 

@@ -23,6 +23,9 @@ func TestTrayRatesAndDetails(t *testing.T) {
 	views[0].BytesIn += 4096
 	views[0].BytesOut += 2048
 	result := sampler.sample(views, start.Add(4*time.Second))
+	if strings.Contains(result.Lines[0].Title, "运行中") {
+		t.Fatalf("title repeats state represented by its status dot: %q", result.Lines[0].Title)
+	}
 	if !strings.Contains(result.Lines[0].Title, "↓ 1.0 KiB/s  ↑ 512 B/s") {
 		t.Fatalf("rate did not use actual elapsed time: %+v", result)
 	}
@@ -30,6 +33,9 @@ func TestTrayRatesAndDetails(t *testing.T) {
 		t.Fatal(result.Traffic)
 	}
 	details := strings.Join(result.Lines[0].Details, "\n")
+	if len(result.Lines[0].Details) != 5 {
+		t.Fatalf("details contain redundant rows: %q", result.Lines[0].Details)
+	}
 	for _, want := range []string{"累计：↓ 5.0 KiB  ↑ 2.5 KiB", "当前连接：2", "本地监听：127.0.0.1:2223", "SSH 跳板：drop", "目标服务：0.0.0.0:2222"} {
 		if !strings.Contains(details, want) {
 			t.Fatalf("missing %q in %s", want, details)
@@ -118,7 +124,7 @@ func TestTrayStatesRoutesAndTotals(t *testing.T) {
 func TestTrayRequestErrorDoesNotChangeRunningState(t *testing.T) {
 	var sampler traySampler
 	result := sampler.sample([]daemon.TunnelView{{Status: tunnel.Status{Name: "socks", State: "running", LastError: "dial target: timed out"}, Direction: "dynamic"}}, time.Now())
-	if !strings.Contains(result.Summary, "运行 1") || !strings.Contains(result.Summary, "异常 0") {
+	if result.Summary != "运行 1" {
 		t.Fatal(result.Summary)
 	}
 }
@@ -132,5 +138,8 @@ func TestTrayFormatting(t *testing.T) {
 	}
 	if trayShort("中文线路名字", 4) != "中文线路…" {
 		t.Fatal("name truncation damaged Unicode")
+	}
+	if traySummary(nil) != "暂无线路" || traySummary(map[string]int{"running": 2, "error": 1}) != "运行 2 · 异常 1" {
+		t.Fatal("summary did not omit empty states")
 	}
 }

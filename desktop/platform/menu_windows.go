@@ -367,7 +367,7 @@ func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPop
 		snapshot.Summary = title
 	}
 	for _, text := range []string{snapshot.Summary, snapshot.Traffic} {
-		if err = appendWindowsMenu(handle, mfDisabled, 0, text); err != nil {
+		if err = appendWindowsMenu(handle, 0, 0, text); err != nil {
 			return nil, err
 		}
 	}
@@ -412,8 +412,8 @@ func updateWindowsMenu(menu, position, flags, id uintptr, text string) {
 }
 
 func (p *windowsTrayPopup) refresh(snapshot TraySnapshot) {
-	updateWindowsMenu(p.handle, 0, mfDisabled, 0, snapshot.Summary)
-	updateWindowsMenu(p.handle, 1, mfDisabled, 0, snapshot.Traffic)
+	updateWindowsMenu(p.handle, 0, 0, 0, snapshot.Summary)
+	updateWindowsMenu(p.handle, 1, 0, 0, snapshot.Traffic)
 	current := make(map[string]TrayLine, len(snapshot.Lines))
 	for _, line := range snapshot.Lines {
 		current[line.Name] = line

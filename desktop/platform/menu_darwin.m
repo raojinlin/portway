@@ -12,8 +12,8 @@ extern void stmMenuAction(int action);
 
 static NSStatusItem *statusItem;
 static STMMenuTarget *menuTarget;
-static NSMenuItem *summaryItem;
-static NSMenuItem *trafficItem;
+static NSTextField *summaryLabel;
+static NSTextField *trafficLabel;
 static NSMenuItem *emptyItem;
 static NSMutableDictionary<NSString *, NSMenuItem *> *lineItems;
 static NSMutableDictionary<NSString *, NSImage *> *stateImages;
@@ -42,6 +42,37 @@ static NSImage *stmStateImage(NSString *state) {
     image.template = NO;
     stateImages[state] = image;
     return image;
+}
+
+static void stmUpdateDetailsView(NSView *view, NSArray<NSString *> *details) {
+    const CGFloat width = 380;
+    const CGFloat rowHeight = 22;
+    const CGFloat padding = 10;
+    CGFloat height = padding * 2 + rowHeight * details.count;
+    view.frame = NSMakeRect(0, 0, width, height);
+    while (view.subviews.count > details.count * 2) [view.subviews.lastObject removeFromSuperview];
+    while (view.subviews.count < details.count * 2) {
+        NSTextField *label = [NSTextField labelWithString:@""];
+        label.textColor = NSColor.labelColor;
+        [view addSubview:label];
+    }
+    for (NSInteger i = 0; i < details.count; i++) {
+        NSString *text = stmMenuText(details[i]);
+        NSRange separator = [text rangeOfString:@"\uff1a"];
+        NSString *key = separator.location == NSNotFound ? @"" : [text substringToIndex:separator.location];
+        NSString *value = separator.location == NSNotFound ? text : [text substringFromIndex:NSMaxRange(separator)];
+        CGFloat y = height - padding - 17 - rowHeight * i;
+        NSTextField *keyLabel = (NSTextField *)view.subviews[i * 2];
+        keyLabel.stringValue = key;
+        keyLabel.frame = NSMakeRect(14, y, 76, 17);
+        keyLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
+        NSTextField *valueLabel = (NSTextField *)view.subviews[i * 2 + 1];
+        valueLabel.stringValue = value;
+        valueLabel.frame = NSMakeRect(94, y, 272, 17);
+        valueLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
+        valueLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        valueLabel.toolTip = details[i];
+    }
 }
 
 void stmSetAppearance(int dark, int followSystem) {
@@ -91,12 +122,22 @@ int stmTrayStart(const char *value) {
         if (statusItem.button.image == nil) statusItem.button.title = name;
         NSMenu *menu = [NSMenu new];
         menu.autoenablesItems = NO;
-        summaryItem = [[NSMenuItem alloc] initWithTitle:name action:nil keyEquivalent:@""];
-        summaryItem.enabled = NO;
-        [menu addItem:summaryItem];
-        trafficItem = [[NSMenuItem alloc] initWithTitle:@"\u6b63\u5728\u8bfb\u53d6\u6d41\u91cf\u2026" action:nil keyEquivalent:@""];
-        trafficItem.enabled = NO;
-        [menu addItem:trafficItem];
+        NSMenuItem *statsItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+        NSView *statsView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 360, 44)];
+        summaryLabel = [NSTextField labelWithString:name];
+        summaryLabel.frame = NSMakeRect(14, 23, 332, 16);
+        summaryLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
+        summaryLabel.textColor = NSColor.labelColor;
+        summaryLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        trafficLabel = [NSTextField labelWithString:@"\u6b63\u5728\u8bfb\u53d6\u6d41\u91cf\u2026"];
+        trafficLabel.frame = NSMakeRect(14, 5, 332, 16);
+        trafficLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
+        trafficLabel.textColor = NSColor.labelColor;
+        trafficLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [statsView addSubview:summaryLabel];
+        [statsView addSubview:trafficLabel];
+        statsItem.view = statsView;
+        [menu addItem:statsItem];
         [menu addItem:[NSMenuItem separatorItem]];
         emptyItem = [[NSMenuItem alloc] initWithTitle:@"\u6682\u65e0\u7ebf\u8def" action:nil keyEquivalent:@""];
         emptyItem.enabled = NO;
@@ -133,9 +174,11 @@ void stmTrayUpdate(const char *value) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (statusItem == nil) return;
         NSMenu *menu = statusItem.menu;
-        summaryItem.title = snapshot[@"summary"];
-        trafficItem.title = snapshot[@"traffic"];
-        statusItem.button.toolTip = [NSString stringWithFormat:@"%@\n%@\n%@", trayName, summaryItem.title, trafficItem.title];
+        summaryLabel.stringValue = snapshot[@"summary"];
+        summaryLabel.toolTip = summaryLabel.stringValue;
+        trafficLabel.stringValue = snapshot[@"traffic"];
+        trafficLabel.toolTip = trafficLabel.stringValue;
+        statusItem.button.toolTip = [NSString stringWithFormat:@"%@\n%@\n%@", trayName, summaryLabel.stringValue, trafficLabel.stringValue];
         NSArray *lines = snapshot[@"lines"];
         emptyItem.hidden = lines.count != 0;
         NSMutableSet *names = [NSMutableSet new];
@@ -167,17 +210,13 @@ void stmTrayUpdate(const char *value) {
             item.image = stmStateImage(line[@"state"]);
             item.toolTip = name;
             NSArray<NSString *> *details = line[@"details"];
-            while (item.submenu.numberOfItems > details.count) [item.submenu removeItemAtIndex:item.submenu.numberOfItems - 1];
-            while (item.submenu.numberOfItems < details.count) {
-                NSMenuItem *detail = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
-                detail.enabled = YES;
+            NSMenuItem *detail = item.submenu.itemArray.firstObject;
+            if (detail == nil) {
+                detail = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+                detail.view = [NSView new];
                 [item.submenu addItem:detail];
             }
-            for (NSInteger i = 0; i < details.count; i++) {
-                NSMenuItem *detail = [item.submenu itemAtIndex:i];
-                detail.title = stmMenuText(details[i]);
-                detail.toolTip = details[i];
-            }
+            stmUpdateDetailsView(detail.view, details);
         }
     });
 }
@@ -186,8 +225,8 @@ void stmTrayStop(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (statusItem != nil) [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
         statusItem = nil;
-        summaryItem = nil;
-        trafficItem = nil;
+        summaryLabel = nil;
+        trafficLabel = nil;
         emptyItem = nil;
         lineItems = nil;
         stateImages = nil;
