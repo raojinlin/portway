@@ -1,23 +1,147 @@
 #import <Cocoa/Cocoa.h>
+#import <CoreText/CoreText.h>
 
 extern void stmMenuAction(int action);
+extern void stmTunnelAction(const char *name, int enabled);
 
 @interface STMMenuTarget : NSObject
+@property(nonatomic, copy) NSString *name;
+@property(nonatomic, copy) NSDictionary *labels;
 - (void)activate:(NSMenuItem *)sender;
+- (void)showAbout:(id)sender;
+- (void)copyProxy:(NSMenuItem *)sender;
+- (void)setTunnel:(NSMenuItem *)sender;
 @end
 
 @implementation STMMenuTarget
 - (void)activate:(NSMenuItem *)sender { stmMenuAction((int)sender.tag); }
+- (void)setTunnel:(NSMenuItem *)sender {
+    NSDictionary *action = sender.representedObject;
+    if (![action isKindOfClass:NSDictionary.class] || ![action[@"name"] isKindOfClass:NSString.class]) return;
+    sender.enabled = NO;
+    stmTunnelAction([action[@"name"] UTF8String], [action[@"enabled"] boolValue]);
+}
+- (void)copyProxy:(NSMenuItem *)sender {
+    NSString *text = sender.representedObject;
+    if (![text isKindOfClass:NSString.class] || text.length == 0) return;
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+    if (![pasteboard setString:text forType:NSPasteboardTypeString]) NSBeep();
+}
+- (void)showAbout:(id)sender {
+    NSAlert *alert = [NSAlert new];
+    alert.messageText = self.name;
+    NSString *version = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
+    alert.informativeText = [NSString stringWithFormat:@"%@ %@\n\n%@", self.labels[@"version"], version, self.labels[@"aboutDescription"]];
+    [alert addButtonWithTitle:self.labels[@"ok"]];
+    alert.window.level = NSFloatingWindowLevel;
+    [alert runModal];
+}
 @end
 
 static NSStatusItem *statusItem;
 static STMMenuTarget *menuTarget;
-static NSTextField *summaryLabel;
-static NSTextField *trafficLabel;
+static NSImage *traySymbol;
 static NSMenuItem *emptyItem;
 static NSMutableDictionary<NSString *, NSMenuItem *> *lineItems;
 static NSMutableDictionary<NSString *, NSImage *> *stateImages;
 static NSString *trayName;
+
+int stmSystemChinese(void) {
+    @autoreleasepool {
+        for (NSString *language in NSLocale.preferredLanguages) {
+            if ([language hasPrefix:@"zh"]) return 1;
+            if ([language hasPrefix:@"en"]) return 0;
+        }
+        return 0;
+    }
+}
+
+static NSImage *stmStatusImage(NSString *text, NSImage *symbol) {
+    NSArray<NSString *> *rates = [text componentsSeparatedByString:@"\n"];
+    if (rates.count != 2) rates = @[@"--", @"--"];
+    NSDictionary *attributes = @{
+        NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:8.5 weight:NSFontWeightMedium],
+        NSForegroundColorAttributeName: NSColor.blackColor
+    };
+    const CGFloat height = 20;
+    const CGFloat iconWidth = symbol == nil ? 0 : 18;
+    const CGFloat textX = iconWidth == 0 ? 0 : iconWidth + 3;
+    CGFloat textWidth = 0;
+    for (NSString *rate in rates) {
+        CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)[[NSAttributedString alloc] initWithString:rate attributes:attributes]);
+        textWidth = MAX(textWidth, ceil(CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds).size.width));
+        CFRelease(line);
+    }
+    NSSize size = NSMakeSize(textX + textWidth + 1, height);
+    // A single template image keeps the icon and both rows centered together,
+    // without NSButtonCell's single-title baseline or multiline clipping.
+    NSImage *image = [NSImage imageWithSize:size flipped:NO drawingHandler:^BOOL(NSRect bounds) {
+        NSRectClip(bounds);
+        [symbol drawInRect:NSMakeRect(0, (height - iconWidth) / 2, iconWidth, iconWidth)];
+        CGContextRef context = NSGraphicsContext.currentContext.CGContext;
+        CGContextSetTextMatrix(context, CGAffineTransformIdentity);
+        for (NSUInteger i = 0; i < rates.count; i++) {
+            NSAttributedString *value = [[NSAttributedString alloc] initWithString:rates[i] attributes:attributes];
+            CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)value);
+            CGRect ink = CTLineGetBoundsWithOptions(line, kCTLineBoundsUseGlyphPathBounds);
+            CGFloat centerY = i == 0 ? height * 0.75 : height * 0.25;
+            CGContextSetTextPosition(context, size.width - 1 - CGRectGetMaxX(ink), centerY - CGRectGetMidY(ink));
+            CTLineDraw(line, context);
+            CFRelease(line);
+        }
+        return YES;
+    }];
+    image.template = YES;
+    return image;
+}
+
+static void stmUpdateStatusText(NSString *text) {
+    statusItem.button.image = stmStatusImage(text, traySymbol);
+}
+
+static void stmTranslateMenu(NSMenu *menu, NSDictionary *labels) {
+    NSDictionary *actions = @{@"About": @"about", @"showAbout:": @"about", @"hide:": @"hide", @"hideOtherApplications:": @"hideOthers",
+        @"unhideAllApplications:": @"showAll", @"Quit": @"quit", @"undo:": @"undo", @"redo:": @"redo",
+        @"cut:": @"cut", @"copy:": @"copy", @"paste:": @"paste", @"pasteAsRichText:": @"pasteStyle",
+        @"delete:": @"delete", @"selectAll:": @"selectAll", @"startSpeaking:": @"speak", @"stopSpeaking:": @"stopSpeaking",
+        @"performMiniaturize:": @"minimize", @"performZoom:": @"zoom", @"enterFullScreenMode:": @"fullscreen"};
+    NSDictionary *submenus = @{@"undo:": @"edit", @"performMiniaturize:": @"window", @"startSpeaking:": @"speech"};
+    for (NSMenuItem *item in menu.itemArray) {
+        if (item.submenu != nil) {
+            for (NSMenuItem *child in item.submenu.itemArray) {
+                if (child.action == NULL) continue;
+                NSString *key = submenus[NSStringFromSelector(child.action)];
+                if (key != nil && [labels[key] isKindOfClass:NSString.class]) {
+                    item.title = labels[key];
+                    item.submenu.title = labels[key];
+                    break;
+                }
+            }
+            stmTranslateMenu(item.submenu, labels);
+        }
+        NSString *key = item.action == NULL ? nil : actions[NSStringFromSelector(item.action)];
+        NSString *title = key == nil ? nil : labels[key];
+        if ([title isKindOfClass:NSString.class]) item.title = title;
+        if ([key isEqualToString:@"about"]) {
+            item.action = @selector(showAbout:);
+            item.target = menuTarget;
+        }
+    }
+}
+
+static void stmUpdateMenuLanguage(NSDictionary *labels) {
+    if (![labels isKindOfClass:NSDictionary.class]) return;
+    menuTarget.labels = labels;
+    stmTranslateMenu(NSApp.mainMenu, labels);
+    NSArray *keys = @[@"open", @"directory", @"quit", @"logs"];
+    for (NSMenuItem *item in statusItem.menu.itemArray) {
+        if (item.tag < 1 || item.tag > 4) continue;
+        NSString *title = labels[keys[item.tag - 1]];
+        if ([title isKindOfClass:NSString.class]) item.title = title;
+    }
+    if ([labels[@"empty"] isKindOfClass:NSString.class]) emptyItem.title = labels[@"empty"];
+}
 
 static NSString *stmMenuText(NSString *value) {
     NSString *singleLine = [[value componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet] componentsJoinedByString:@" "];
@@ -59,16 +183,18 @@ static void stmUpdateDetailsView(NSView *view, NSArray<NSString *> *details) {
     for (NSInteger i = 0; i < details.count; i++) {
         NSString *text = stmMenuText(details[i]);
         NSRange separator = [text rangeOfString:@"\uff1a"];
+        if (separator.location == NSNotFound) separator = [text rangeOfString:@": "];
         NSString *key = separator.location == NSNotFound ? @"" : [text substringToIndex:separator.location];
         NSString *value = separator.location == NSNotFound ? text : [text substringFromIndex:NSMaxRange(separator)];
         CGFloat y = height - padding - 17 - rowHeight * i;
         NSTextField *keyLabel = (NSTextField *)view.subviews[i * 2];
         keyLabel.stringValue = key;
-        keyLabel.frame = NSMakeRect(14, y, 66, 17);
+        CGFloat keyWidth = [text containsString:@"\uff1a"] ? 66 : 86;
+        keyLabel.frame = NSMakeRect(14, y, keyWidth, 17);
         keyLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
         NSTextField *valueLabel = (NSTextField *)view.subviews[i * 2 + 1];
         valueLabel.stringValue = value;
-        valueLabel.frame = NSMakeRect(84, y, 202, 17);
+        valueLabel.frame = NSMakeRect(18 + keyWidth, y, width - 32 - keyWidth, 17);
         valueLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightRegular];
         valueLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         valueLabel.toolTip = details[i];
@@ -109,36 +235,21 @@ int stmTrayStart(const char *value) {
         if (statusItem != nil) return;
         trayName = name;
         menuTarget = [STMMenuTarget new];
+        menuTarget.name = name;
         statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
         if (statusItem == nil || statusItem.button == nil) { result = 2; return; }
         statusItem.visible = YES;
         statusItem.button.toolTip = name;
         if (@available(macOS 11.0, *)) {
-            NSImage *image = [NSImage imageWithSystemSymbolName:@"arrow.left.arrow.right" accessibilityDescription:name];
-            image.size = NSMakeSize(18, 18);
-            image.template = YES;
-            statusItem.button.image = image;
+            traySymbol = [NSImage imageWithSystemSymbolName:@"arrow.left.arrow.right" accessibilityDescription:name];
+            traySymbol.size = NSMakeSize(18, 18);
         }
-        if (statusItem.button.image == nil) statusItem.button.title = name;
+        statusItem.button.title = @"";
+        statusItem.button.imagePosition = NSImageOnly;
+        statusItem.button.imageScaling = NSImageScaleNone;
+        stmUpdateStatusText(@"--\n--");
         NSMenu *menu = [NSMenu new];
         menu.autoenablesItems = NO;
-        NSMenuItem *statsItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
-        NSView *statsView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 360, 44)];
-        summaryLabel = [NSTextField labelWithString:name];
-        summaryLabel.frame = NSMakeRect(14, 23, 332, 16);
-        summaryLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
-        summaryLabel.textColor = NSColor.labelColor;
-        summaryLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        trafficLabel = [NSTextField labelWithString:@"\u6b63\u5728\u8bfb\u53d6\u6d41\u91cf\u2026"];
-        trafficLabel.frame = NSMakeRect(14, 5, 332, 16);
-        trafficLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightRegular];
-        trafficLabel.textColor = NSColor.labelColor;
-        trafficLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        [statsView addSubview:summaryLabel];
-        [statsView addSubview:trafficLabel];
-        statsItem.view = statsView;
-        [menu addItem:statsItem];
-        [menu addItem:[NSMenuItem separatorItem]];
         emptyItem = [[NSMenuItem alloc] initWithTitle:@"\u6682\u65e0\u7ebf\u8def" action:nil keyEquivalent:@""];
         emptyItem.enabled = NO;
         [menu addItem:emptyItem];
@@ -146,12 +257,13 @@ int stmTrayStart(const char *value) {
         stateImages = [NSMutableDictionary new];
         [menu addItem:[NSMenuItem separatorItem]];
         NSArray<NSString *> *titles = @[
-            [@"Open " stringByAppendingString:name], @"Open Configuration Folder", [@"Quit " stringByAppendingString:name]
+            [@"Open " stringByAppendingString:name], @"Open Logs", @"Open Configuration Folder", [@"Quit " stringByAppendingString:name]
         ];
+        NSArray<NSNumber *> *tags = @[@1, @4, @2, @3];
         for (NSInteger i = 0; i < titles.count; i++) {
             NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:titles[i] action:@selector(activate:) keyEquivalent:@""];
             item.target = menuTarget;
-            item.tag = i + 1;
+            item.tag = tags[i].integerValue;
             [menu addItem:item];
         }
         statusItem.menu = menu;
@@ -161,6 +273,45 @@ int stmTrayStart(const char *value) {
     if ([NSThread isMainThread]) start();
     else dispatch_sync(dispatch_get_main_queue(), start);
     return result;
+}
+
+static void stmUpdateLineActions(NSMenu *menu, NSDictionary *line, NSDictionary *labels) {
+    if (menu.numberOfItems == 1) {
+        [menu addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *toggle = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(setTunnel:) keyEquivalent:@""];
+        toggle.target = menuTarget;
+        [menu addItem:toggle];
+    }
+    BOOL enabled = [line[@"enabled"] boolValue];
+    BOOL busy = [line[@"busy"] boolValue];
+    NSMenuItem *toggle = [menu itemAtIndex:2];
+    toggle.title = labels[busy ? @"working" : enabled ? @"stopTunnel" : @"startTunnel"];
+    toggle.enabled = !busy;
+    toggle.representedObject = @{@"name": line[@"name"], @"enabled": @(!enabled)};
+    if (@available(macOS 11.0, *)) {
+        toggle.image = [NSImage imageWithSystemSymbolName:enabled ? @"stop.fill" : @"play.fill" accessibilityDescription:nil];
+    }
+    NSString *proxyURL = line[@"proxyURL"];
+    BOOL hasProxy = [proxyURL isKindOfClass:NSString.class] && proxyURL.length > 0;
+    if (!hasProxy) {
+        while (menu.numberOfItems > 3) [menu removeItemAtIndex:3];
+    } else {
+        if (menu.numberOfItems == 3) {
+            for (NSInteger i = 0; i < 2; i++) {
+                NSMenuItem *copy = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(copyProxy:) keyEquivalent:@""];
+                copy.target = menuTarget;
+                [menu addItem:copy];
+            }
+        }
+        NSMenuItem *copyURL = [menu itemAtIndex:3];
+        copyURL.title = labels[@"copyProxy"];
+        copyURL.representedObject = proxyURL;
+        copyURL.toolTip = proxyURL;
+        NSMenuItem *copyCommand = [menu itemAtIndex:4];
+        copyCommand.title = labels[@"copyCommand"];
+        copyCommand.representedObject = line[@"proxyCommand"];
+        copyCommand.toolTip = line[@"proxyCommand"];
+    }
 }
 
 void stmTrayUpdate(const char *value) {
@@ -173,12 +324,20 @@ void stmTrayUpdate(const char *value) {
     if (![snapshot isKindOfClass:NSDictionary.class]) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         if (statusItem == nil) return;
+        NSString *statusText = snapshot[@"statusText"];
+        if ([statusText isKindOfClass:NSString.class] && statusText.length > 0) {
+            stmUpdateStatusText(statusText);
+        }
+        stmUpdateMenuLanguage(snapshot[@"labels"]);
         NSMenu *menu = statusItem.menu;
-        summaryLabel.stringValue = snapshot[@"summary"];
-        summaryLabel.toolTip = summaryLabel.stringValue;
-        trafficLabel.stringValue = snapshot[@"traffic"];
-        trafficLabel.toolTip = trafficLabel.stringValue;
-        statusItem.button.toolTip = [NSString stringWithFormat:@"%@\n%@\n%@", trayName, summaryLabel.stringValue, trafficLabel.stringValue];
+        statusItem.button.toolTip = trayName;
+        NSArray *rates = [statusText componentsSeparatedByString:@"\n"];
+        NSDictionary *labels = snapshot[@"labels"];
+        if (rates.count == 2) {
+            statusItem.button.toolTip = [statusItem.button.toolTip stringByAppendingFormat:@"\n%@: %@\n%@: %@",
+                labels[@"upload"], rates[0], labels[@"download"], rates[1]];
+            statusItem.button.accessibilityLabel = statusItem.button.toolTip;
+        }
         NSArray *lines = snapshot[@"lines"];
         emptyItem.hidden = lines.count != 0;
         NSMutableSet *names = [NSMutableSet new];
@@ -217,6 +376,7 @@ void stmTrayUpdate(const char *value) {
                 [item.submenu addItem:detail];
             }
             stmUpdateDetailsView(detail.view, details);
+            stmUpdateLineActions(item.submenu, line, labels);
         }
     });
 }
@@ -225,8 +385,7 @@ void stmTrayStop(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (statusItem != nil) [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
         statusItem = nil;
-        summaryLabel = nil;
-        trafficLabel = nil;
+        traySymbol = nil;
         emptyItem = nil;
         lineItems = nil;
         stateImages = nil;

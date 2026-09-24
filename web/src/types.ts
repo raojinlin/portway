@@ -76,6 +76,34 @@ export interface ConnectionHistory {
   persistence_error?: string
 }
 
+export interface RuntimeLogEntry {
+  id: string
+  time: string
+  level: string
+  message: string
+  tunnel: string
+  raw: string
+}
+
+export interface RuntimeLogs {
+  entries: RuntimeLogEntry[]
+  enabled: boolean
+  path: string
+  limit: number
+  truncated: boolean
+}
+
+export interface ActivityConnection extends TunnelConnection { tunnel: string }
+
+export interface ConnectionsView {
+  connections: ActivityConnection[]
+  tunnels: string[]
+  total: number
+  limit: number
+  persisted: boolean
+  persistence_error?: string
+}
+
 export interface DaemonConfig {
   addr: string
   state_file: string

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 
@@ -13,6 +14,8 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", s.handleSaveConfig)
+	mux.HandleFunc("GET /api/logs", s.handleLogs)
+	mux.HandleFunc("GET /api/connections", s.handleAllConnections)
 
 	mux.HandleFunc("GET /api/tunnels", s.handleList)
 	mux.HandleFunc("POST /api/tunnels", s.handleCreate)
@@ -235,53 +238,44 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	entry, exists := s.state.Tunnels[name]
-	if !exists {
-		writeError(w, http.StatusNotFound, "not found")
-		return
-	}
-
-	_ = s.manager.Remove(name)
-	entry.Enabled = false
-	s.state.Tunnels[name] = entry
-	if err := s.store.Save(s.state); err != nil {
-		writeError(w, http.StatusInternalServerError, "persist state: "+err.Error())
-		return
-	}
-
-	v, _ := s.viewLocked(name)
-	writeJSON(w, http.StatusOK, v)
+	s.handleSetEnabled(w, r, false)
 }
 
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	s.handleSetEnabled(w, r, true)
+}
 
+func (s *Server) handleSetEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
+	v, status, err := s.setTunnelEnabled(r.PathValue("name"), enabled)
+	if err != nil {
+		writeError(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *Server) setTunnelEnabled(name string, enabled bool) (TunnelView, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	entry, exists := s.state.Tunnels[name]
 	if !exists {
-		writeError(w, http.StatusNotFound, "not found")
-		return
+		return TunnelView{}, http.StatusNotFound, fmt.Errorf("tunnel %q not found", name)
 	}
-
-	if err := s.manager.Add(s.tunnelContext(), entry.Config); err != nil {
-		writeError(w, http.StatusInternalServerError, "start tunnel: "+err.Error())
-		return
+	if enabled {
+		// A stale menu click must not restart an already active instance.
+		if _, running := s.manager.Status(name); !running {
+			if err := s.manager.Add(s.tunnelContext(), entry.Config); err != nil {
+				return TunnelView{}, http.StatusInternalServerError, fmt.Errorf("start tunnel: %w", err)
+			}
+		}
+	} else {
+		_ = s.manager.Remove(name)
 	}
-
-	entry.Enabled = true
+	entry.Enabled = enabled
 	s.state.Tunnels[name] = entry
 	if err := s.store.Save(s.state); err != nil {
-		writeError(w, http.StatusInternalServerError, "persist state: "+err.Error())
-		return
+		return TunnelView{}, http.StatusInternalServerError, fmt.Errorf("persist state: %w", err)
 	}
-
 	v, _ := s.viewLocked(name)
-	writeJSON(w, http.StatusOK, v)
+	return v, http.StatusOK, nil
 }

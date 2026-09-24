@@ -23,8 +23,8 @@ func TestNativeMenusStartWithoutDOMReady(t *testing.T) {
 	started := false
 	updates := make(chan platform.TraySnapshot, 1)
 	err := a.startDesktop(context.Background(), nativeMenus{
-		start: func(title string, show, quit, directory func()) error {
-			if title != "Portway" || show == nil || quit == nil || directory == nil {
+		start: func(title string, actions platform.TrayActions) error {
+			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.Copy == nil || actions.SetEnabled == nil {
 				t.Fatal("missing native title or menu actions")
 			}
 			if a.service == nil {
@@ -54,13 +54,73 @@ func TestNativeMenusStartWithoutDOMReady(t *testing.T) {
 	assertDesktopLog(t, a, "desktop native menus ready")
 }
 
+func TestLanguageEvent(t *testing.T) {
+	a := &application{language: "zh"}
+	for _, data := range [][]interface{}{nil, {nil}, {1}, {"fr"}, {"en", "zh"}} {
+		a.languageEvent(data...)
+		if a.language != "zh" {
+			t.Fatal("invalid language event accepted")
+		}
+	}
+	a.languageEvent("en")
+	if a.language != "en" {
+		t.Fatal("English switch ignored")
+	}
+	a.languageEvent("zh")
+	if a.language != "zh" {
+		t.Fatal("Chinese switch ignored")
+	}
+}
+
+func TestTrayActionRefreshAndFailureCleanup(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := &application{ready: make(chan struct{}), trayRefresh: make(chan struct{}, 1)}
+	if err := a.changeTunnel("missing", true); err == nil {
+		t.Fatal("uninitialized backend accepted action")
+	}
+	a.startup(context.Background())
+	defer closeTestBackend(a)
+	if err := a.changeTunnel("missing", true); err == nil {
+		t.Fatal("missing tunnel accepted action")
+	}
+	if len(a.trayPending) != 0 {
+		t.Fatal("failed action left menu busy")
+	}
+	select {
+	case <-a.trayRefresh:
+	default:
+		t.Fatal("action did not request an immediate menu refresh")
+	}
+	a.trayPending["missing"] = true
+	if err := a.changeTunnel("missing", false); err != nil {
+		t.Fatal("duplicate in-flight action was not suppressed")
+	}
+	assertDesktopLog(t, a, "desktop tunnel action failed")
+}
+
+func TestLogNavigationRemainsPendingUntilApplied(t *testing.T) {
+	a := &application{}
+	a.openLogs() // No frontend context yet; retain the request for its ready event.
+	if !a.pendingLogs {
+		t.Fatal("startup log navigation was dropped")
+	}
+	a.navigationApplied("unknown")
+	if !a.pendingLogs {
+		t.Fatal("invalid acknowledgement cleared navigation")
+	}
+	a.navigationApplied("activity")
+	if a.pendingLogs {
+		t.Fatal("applied navigation would replay on reload")
+	}
+}
+
 func TestNativeMenuFailureIsReportedAndLogged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := &application{ready: make(chan struct{})}
 	defer closeTestBackend(a)
 	failure := errors.New("status item unavailable")
 	err := a.startDesktop(context.Background(), nativeMenus{
-		start: func(string, func(), func(), func()) error { return failure },
+		start: func(string, platform.TrayActions) error { return failure },
 	})
 	if !errors.Is(err, failure) {
 		t.Fatalf("lost native startup error: %v", err)
@@ -75,7 +135,7 @@ func TestNativeMenusDoNotStartAfterCancellation(t *testing.T) {
 	defer closeTestBackend(a)
 	a.cancel()
 	err := a.setupWindow(context.Background(), nativeMenus{
-		start: func(string, func(), func(), func()) error { t.Fatal("menus created during shutdown"); return nil },
+		start: func(string, platform.TrayActions) error { t.Fatal("menus created during shutdown"); return nil },
 	})
 	if err != nil {
 		t.Fatal(err)

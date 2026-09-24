@@ -1,4 +1,4 @@
-import type { ApiError, ConnectionHistory, DaemonConfig, DaemonConfigView, TunnelConnection, TunnelRequest, TunnelView } from './types'
+import type { ApiError, ConnectionHistory, ConnectionsView, RuntimeLogs, DaemonConfig, DaemonConfigView, TunnelConnection, TunnelRequest, TunnelView } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
@@ -17,6 +17,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  logs: (query: URLSearchParams, signal?: AbortSignal) => request<RuntimeLogs>(`/api/logs?${query}`, { signal, cache: 'no-store' }),
+
+  allConnections: (query: URLSearchParams, signal?: AbortSignal) => request<ConnectionsView>(`/api/connections?${query}`, { signal, cache: 'no-store' }),
   config: (signal?: AbortSignal) => request<DaemonConfigView>('/api/config', { signal, cache: 'no-store' }),
 
   saveConfig: (body: DaemonConfig) => request<DaemonConfigView>('/api/config', {

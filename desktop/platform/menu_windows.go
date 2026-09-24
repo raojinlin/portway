@@ -10,6 +10,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func SystemLanguage() string {
+	language, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetUserDefaultUILanguage").Call()
+	if language&0x3ff == 0x04 {
+		return "zh"
+	}
+	return "en"
+}
+
 const (
 	wmDestroy     = 0x0002
 	wmClose       = 0x0010
@@ -53,6 +61,7 @@ var (
 	destroyMenu           = trayUser32.NewProc("DestroyMenu")
 	appendMenu            = trayUser32.NewProc("AppendMenuW")
 	modifyMenu            = trayUser32.NewProc("ModifyMenuW")
+	deleteMenu            = trayUser32.NewProc("DeleteMenu")
 	trackPopupMenu        = trayUser32.NewProc("TrackPopupMenuEx")
 	endMenu               = trayUser32.NewProc("EndMenu")
 	getCursorPos          = trayUser32.NewProc("GetCursorPos")
@@ -95,14 +104,16 @@ type trayNotifyIcon struct {
 }
 
 type windowsTray struct {
-	title                 string
-	show, quit, directory func()
-	window                atomic.Uintptr
-	stopping              atomic.Bool
-	ready                 chan error
-	done                  chan struct{}
-	snapshotMu            sync.Mutex
-	snapshot              TraySnapshot
+	title                       string
+	show, quit, directory, logs func()
+	copyProxy                   func(string)
+	setEnabled                  func(string, bool)
+	window                      atomic.Uintptr
+	stopping                    atomic.Bool
+	ready                       chan error
+	done                        chan struct{}
+	snapshotMu                  sync.Mutex
+	snapshot                    TraySnapshot
 	// Everything below is owned exclusively by the tray message-loop thread.
 	icon           trayNotifyIcon
 	taskbarCreated uint32
@@ -110,13 +121,13 @@ type windowsTray struct {
 	popup          *windowsTrayPopup
 }
 
-func Start(title string, show, quit, directory func()) error {
+func Start(title string, actions TrayActions) error {
 	winTrayMu.Lock()
 	if winTray != nil {
 		winTrayMu.Unlock()
 		return fmt.Errorf("Windows tray already started")
 	}
-	t := &windowsTray{title: title, show: show, quit: quit, directory: directory,
+	t := &windowsTray{title: title, show: actions.Show, quit: actions.Quit, directory: actions.Directory, logs: actions.Logs, copyProxy: actions.Copy, setEnabled: actions.SetEnabled,
 		ready: make(chan error, 1), done: make(chan struct{})}
 	winTray = t
 	winTrayMu.Unlock()
@@ -331,17 +342,36 @@ func (t *windowsTray) openMenu(hwnd uintptr, anchor *trayPoint) {
 		go t.directory()
 	case 3:
 		go t.quit()
+	case 4:
+		go t.logs()
+	default:
+		if action, ok := popup.actions[command]; ok && t.setEnabled != nil {
+			go t.setEnabled(action.Name, action.Enabled)
+		}
+		if text := popup.copies[command]; text != "" && t.copyProxy != nil {
+			go t.copyProxy(text)
+		}
 	}
 }
 
 type windowsLineMenu struct {
-	position uintptr
-	submenu  uintptr
-	details  int
+	toggleID       uintptr
+	togglePosition uintptr
+	copyID         uintptr
+	copyPosition   uintptr
+	copyItems      int
+	position       uintptr
+	submenu        uintptr
+	details        int
 }
 type windowsTrayPopup struct {
-	handle uintptr
-	lines  map[string]windowsLineMenu
+	actions         map[uintptr]TunnelAction
+	copies          map[uintptr]string
+	handle          uintptr
+	lines           map[string]windowsLineMenu
+	title           string
+	actionsPosition uintptr
+	empty           bool
 }
 
 func appendWindowsMenu(menu, flags, id uintptr, text string) error {
@@ -353,11 +383,16 @@ func appendWindowsMenu(menu, flags, id uintptr, text string) error {
 }
 
 func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPopup, err error) {
+	labels := MenuLabels(snapshot.Language, title)
 	handle, _, callErr := createPopupMenu.Call()
 	if handle == 0 {
 		return nil, fmt.Errorf("create popup menu: %w", callErr)
 	}
-	popup := &windowsTrayPopup{handle: handle, lines: make(map[string]windowsLineMenu)}
+	popup := &windowsTrayPopup{handle: handle, lines: make(map[string]windowsLineMenu), copies: make(map[uintptr]string), actions: make(map[uintptr]TunnelAction), title: title, empty: len(snapshot.Lines) == 0}
+	popup.actionsPosition = uintptr(4 + len(snapshot.Lines))
+	if popup.empty {
+		popup.actionsPosition++
+	}
 	defer func() {
 		if err != nil {
 			destroyMenu.Call(handle)
@@ -375,7 +410,7 @@ func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPop
 		return nil, err
 	}
 	if len(snapshot.Lines) == 0 {
-		if err = appendWindowsMenu(handle, mfDisabled, 0, "暂无线路"); err != nil {
+		if err = appendWindowsMenu(handle, mfDisabled, 0, labels["empty"]); err != nil {
 			return nil, err
 		}
 	}
@@ -388,18 +423,31 @@ func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPop
 			destroyMenu.Call(submenu)
 			return nil, err
 		}
-		popup.lines[line.Name] = windowsLineMenu{position: uintptr(3 + i), submenu: submenu, details: len(line.Details)}
+		entry := windowsLineMenu{position: uintptr(3 + i), submenu: submenu, details: len(line.Details),
+			toggleID: uintptr(100 + i*3), togglePosition: uintptr(len(line.Details) + 1),
+			copyID: uintptr(101 + i*3), copyPosition: uintptr(len(line.Details) + 2)}
 		for _, detail := range line.Details {
 			if err = appendWindowsMenu(submenu, 0, 0, detail); err != nil {
 				return nil, err
 			}
 		}
+		if err = appendWindowsMenu(submenu, mfSeparator, 0, ""); err != nil {
+			return nil, err
+		}
+		if err = appendWindowsMenu(submenu, 0, entry.toggleID, ""); err != nil {
+			return nil, err
+		}
+		popup.updateToggleMenu(entry, line, labels, true)
+		if err = popup.updateProxyMenu(&entry, line, labels); err != nil {
+			return nil, err
+		}
+		popup.lines[line.Name] = entry
 	}
 	if err = appendWindowsMenu(handle, mfSeparator, 0, ""); err != nil {
 		return nil, err
 	}
-	for i, text := range []string{"打开 " + title, "打开配置目录", "退出 " + title} {
-		if err = appendWindowsMenu(handle, 0, uintptr(i+1), text); err != nil {
+	for i, text := range []string{labels["open"], labels["logs"], labels["directory"], labels["quit"]} {
+		if err = appendWindowsMenu(handle, 0, []uintptr{1, 4, 2, 3}[i], text); err != nil {
 			return nil, err
 		}
 	}
@@ -411,20 +459,71 @@ func updateWindowsMenu(menu, position, flags, id uintptr, text string) {
 	modifyMenu.Call(menu, position, mfByPosition|flags, id, uintptr(unsafe.Pointer(label)))
 }
 
+func (p *windowsTrayPopup) updateToggleMenu(menu windowsLineMenu, line TrayLine, labels map[string]string, exists bool) {
+	key := "startTunnel"
+	if line.Enabled {
+		key = "stopTunnel"
+	}
+	flags := uintptr(0)
+	if line.Busy || !exists {
+		flags = mfDisabled
+		delete(p.actions, menu.toggleID)
+		if line.Busy {
+			key = "working"
+		}
+	} else {
+		p.actions[menu.toggleID] = TunnelAction{Name: line.Name, Enabled: !line.Enabled}
+	}
+	updateWindowsMenu(menu.submenu, menu.togglePosition, flags, menu.toggleID, labels[key])
+}
+
+func (p *windowsTrayPopup) updateProxyMenu(menu *windowsLineMenu, line TrayLine, labels map[string]string) error {
+	if line.ProxyURL == "" {
+		delete(p.copies, menu.copyID)
+		delete(p.copies, menu.copyID+1)
+		for menu.copyItems > 0 {
+			if result, _, err := deleteMenu.Call(menu.submenu, menu.copyPosition, mfByPosition); result == 0 {
+				return fmt.Errorf("remove proxy menu: %w", err)
+			}
+			menu.copyItems--
+		}
+		return nil
+	}
+	keys := []string{"copyProxy", "copyCommand"}
+	for menu.copyItems < len(keys) {
+		if err := appendWindowsMenu(menu.submenu, 0, menu.copyID+uintptr(menu.copyItems), labels[keys[menu.copyItems]]); err != nil {
+			return err
+		}
+		menu.copyItems++
+	}
+	for j, key := range keys {
+		updateWindowsMenu(menu.submenu, menu.copyPosition+uintptr(j), 0, menu.copyID+uintptr(j), labels[key])
+	}
+	p.copies[menu.copyID], p.copies[menu.copyID+1] = line.ProxyURL, line.ProxyCommand
+	return nil
+}
+
 func (p *windowsTrayPopup) refresh(snapshot TraySnapshot) {
+	labels := MenuLabels(snapshot.Language, p.title)
+	for i, key := range []string{"open", "logs", "directory", "quit"} {
+		updateWindowsMenu(p.handle, p.actionsPosition+uintptr(i), 0, []uintptr{1, 4, 2, 3}[i], labels[key])
+	}
+	if p.empty {
+		updateWindowsMenu(p.handle, 3, mfDisabled, 0, labels["empty"])
+	}
 	updateWindowsMenu(p.handle, 0, 0, 0, snapshot.Summary)
 	updateWindowsMenu(p.handle, 1, 0, 0, snapshot.Traffic)
 	current := make(map[string]TrayLine, len(snapshot.Lines))
 	for _, line := range snapshot.Lines {
 		current[line.Name] = line
 	}
-	// Keep the open menu's structure stable; new/removed lines reconcile on reopen.
+	// Keep line positions stable; copy actions follow availability even while open.
 	for name, menu := range p.lines {
 		line, exists := current[name]
 		flags := uintptr(mfPopup)
 		if !exists {
 			flags |= mfDisabled
-			line.Title = name + " · 已移除"
+			line.Title = name + " · " + MenuLabels(snapshot.Language, "")["removed"]
 		}
 		updateWindowsMenu(p.handle, menu.position, flags, menu.submenu, line.Title)
 		for i := 0; i < menu.details; i++ {
@@ -434,5 +533,8 @@ func (p *windowsTrayPopup) refresh(snapshot TraySnapshot) {
 			}
 			updateWindowsMenu(menu.submenu, uintptr(i), 0, 0, text)
 		}
+		_ = p.updateProxyMenu(&menu, line, labels)
+		p.updateToggleMenu(menu, line, labels, exists)
+		p.lines[name] = menu
 	}
 }

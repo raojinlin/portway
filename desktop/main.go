@@ -24,14 +24,18 @@ const applicationTitle = "Portway"
 const applicationVersion = "0.1.0"
 
 type application struct {
-	mu       sync.RWMutex
-	ctx      context.Context
-	service  *daemon.Service
-	problem  error
-	ready    chan struct{}
-	cancel   context.CancelFunc
-	done     <-chan struct{}
-	nativeMu sync.Mutex
+	mu          sync.RWMutex
+	ctx         context.Context
+	service     *daemon.Service
+	problem     error
+	ready       chan struct{}
+	cancel      context.CancelFunc
+	done        <-chan struct{}
+	nativeMu    sync.Mutex
+	language    string
+	pendingLogs bool
+	trayPending map[string]bool
+	trayRefresh chan struct{}
 }
 
 func (a *application) startup(ctx context.Context) {
@@ -83,9 +87,49 @@ func (a *application) show() {
 
 func (a *application) domReady(ctx context.Context) {
 	wruntime.EventsEmit(ctx, "desktop:theme-ready")
+	wruntime.EventsEmit(ctx, "desktop:language-ready")
 }
 
-type menuStarter func(string, func(), func(), func()) error
+func (a *application) openLogs() {
+	a.mu.Lock()
+	a.pendingLogs = true
+	a.mu.Unlock()
+	a.show()
+	a.sendNavigation()
+}
+
+func (a *application) sendNavigation() {
+	a.mu.RLock()
+	ctx, pending := a.ctx, a.pendingLogs
+	a.mu.RUnlock()
+	if ctx != nil && pending {
+		wruntime.EventsEmit(ctx, "desktop:navigate", "activity")
+	}
+}
+
+func (a *application) navigationApplied(data ...interface{}) {
+	if len(data) != 1 || data[0] != "activity" {
+		return
+	}
+	a.mu.Lock()
+	a.pendingLogs = false
+	a.mu.Unlock()
+}
+
+func (a *application) languageEvent(data ...interface{}) {
+	if len(data) != 1 {
+		return
+	}
+	language, ok := data[0].(string)
+	if !ok || (language != "zh" && language != "en") {
+		return
+	}
+	a.mu.Lock()
+	a.language = language
+	a.mu.Unlock()
+}
+
+type menuStarter func(string, platform.TrayActions) error
 
 type nativeMenus struct {
 	start  menuStarter
@@ -112,9 +156,35 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 		return nil
 	default:
 	}
+	a.mu.Lock()
+	a.trayRefresh = make(chan struct{}, 1)
+	refresh := a.trayRefresh
+	a.mu.Unlock()
 	executable, _ := os.Executable()
 	service.Logger().Info("desktop native menus initializing", "app", applicationTitle, "platform", runtime.GOOS, "executable", executable)
-	if err := menus.start(applicationTitle, a.show, func() { wruntime.Quit(ctx) }, func() { platform.OpenDirectory(service.ConfigDirectory()) }); err != nil {
+	if err := menus.start(applicationTitle, platform.TrayActions{
+		Show: a.show, Quit: func() { wruntime.Quit(ctx) }, Directory: func() { platform.OpenDirectory(service.ConfigDirectory()) }, Logs: a.openLogs,
+		SetEnabled: func(name string, enabled bool) {
+			if err := a.changeTunnel(name, enabled); err != nil {
+				a.mu.RLock()
+				language := a.language
+				a.mu.RUnlock()
+				select {
+				case <-a.done:
+					return
+				default:
+				}
+				_, _ = wruntime.MessageDialog(ctx, wruntime.MessageDialogOptions{Type: wruntime.ErrorDialog,
+					Title: trayText(language, "线路操作失败", "Tunnel action failed"), Message: name + "\n\n" + err.Error(),
+					Buttons: []string{trayText(language, "好", "OK")}})
+			}
+		},
+		Copy: func(text string) {
+			if err := wruntime.ClipboardSetText(ctx, text); err != nil {
+				service.Logger().Warn("clipboard write failed", "error", err)
+			}
+		},
+	}); err != nil {
 		service.Logger().Error("desktop native menus failed", "error", err)
 		return fmt.Errorf("cannot initialize desktop menus: %w", err)
 	}
@@ -124,15 +194,58 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 		defer ticker.Stop()
 		var sampler traySampler
 		for {
-			menus.update(sampler.sample(service.TunnelViews(), time.Now()))
+			a.mu.RLock()
+			sampler.language = a.language
+			a.mu.RUnlock()
+			snapshot := sampler.sample(service.TunnelViews(), time.Now())
+			a.mu.RLock()
+			for i := range snapshot.Lines {
+				snapshot.Lines[i].Busy = a.trayPending[snapshot.Lines[i].Name]
+			}
+			a.mu.RUnlock()
+			menus.update(snapshot)
 			select {
 			case <-a.done:
 				return
 			case <-ticker.C:
+			case <-refresh:
 			}
 		}
 	}()
 	return nil
+}
+
+func (a *application) changeTunnel(name string, enabled bool) error {
+	a.mu.Lock()
+	if a.trayPending[name] {
+		a.mu.Unlock()
+		return nil
+	}
+	service := a.service
+	if service == nil {
+		a.mu.Unlock()
+		return fmt.Errorf("backend is not ready")
+	}
+	if a.trayPending == nil {
+		a.trayPending = make(map[string]bool)
+	}
+	a.trayPending[name] = true
+	refresh := a.trayRefresh
+	a.mu.Unlock()
+	notify := func() {
+		select {
+		case refresh <- struct{}{}:
+		default:
+		}
+	}
+	notify()
+	defer func() {
+		a.mu.Lock()
+		delete(a.trayPending, name)
+		a.mu.Unlock()
+		notify()
+	}()
+	return service.SetTunnelEnabled(name, enabled)
 }
 
 func (a *application) shutdown(context.Context) {
@@ -165,6 +278,12 @@ func (a *application) windowOptions() *options.App {
 		Windows:     desktopWindowsOptions(),
 		AssetServer: &assetserver.Options{Assets: daemon.WebAssets(), Handler: http.HandlerFunc(a.serve)},
 		OnStartup: func(ctx context.Context) {
+			a.mu.Lock()
+			a.language = platform.SystemLanguage()
+			a.mu.Unlock()
+			wruntime.EventsOn(ctx, "desktop:language", a.languageEvent)
+			wruntime.EventsOn(ctx, "desktop:navigation-ready", func(...interface{}) { a.sendNavigation() })
+			wruntime.EventsOn(ctx, "desktop:navigation-applied", a.navigationApplied)
 			wruntime.EventsOn(ctx, "desktop:theme", func(data ...interface{}) {
 				applyThemeEvent(data, func(dark, followSystem bool, r, g, b uint8) {
 					wruntime.WindowSetBackgroundColour(ctx, r, g, b, 255)
@@ -180,8 +299,13 @@ func (a *application) windowOptions() *options.App {
 			})
 			// Native menus must not wait for webview navigation or external page resources.
 			if err := a.startDesktop(ctx, nativeMenus{start: platform.Start, update: platform.Update}); err != nil {
+				a.mu.RLock()
+				language := a.language
+				a.mu.RUnlock()
+				message := trayText(language, "无法启动 Portway。\n\n", "Cannot start Portway.\n\n") + err.Error() +
+					trayText(language, "\n\n如果 CLI daemon 正在运行，请先停止，再打开桌面应用。", "\n\nIf a CLI daemon is running, stop it before opening the desktop app.")
 				_, _ = wruntime.MessageDialog(ctx, wruntime.MessageDialogOptions{Type: wruntime.ErrorDialog,
-					Title: applicationTitle, Message: "Cannot start Portway.\n\n" + err.Error() + "\n\nIf a CLI daemon is running, stop it before opening the desktop app.", Buttons: []string{"OK"}})
+					Title: applicationTitle, Message: message, Buttons: []string{trayText(language, "好", "OK")}})
 				wruntime.Quit(ctx)
 			}
 		}, OnDomReady: a.domReady, OnShutdown: a.shutdown,

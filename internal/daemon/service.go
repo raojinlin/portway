@@ -163,6 +163,22 @@ func (s *Service) TunnelViews() []TunnelView {
 	return s.server.tunnelViews()
 }
 
+// SetTunnelEnabled shares the HTTP controls and persistence without opening a port.
+func (s *Service) SetTunnelEnabled(name string, enabled bool) error {
+	s.requests.RLock()
+	defer s.requests.RUnlock()
+	if s.closing.Load() {
+		return errors.New("backend is stopping")
+	}
+	_, _, err := s.server.setTunnelEnabled(name, enabled)
+	if err != nil {
+		s.logger.Warn("desktop tunnel action failed", "tunnel", name, "enabled", enabled, "error", logging.SafeError(err))
+	} else {
+		s.logger.Info("desktop tunnel action applied", "tunnel", name, "enabled", enabled)
+	}
+	return err
+}
+
 func (s *Service) Summary() (running, failed int) {
 	for _, status := range s.server.manager.List() {
 		if status.State == "running" {

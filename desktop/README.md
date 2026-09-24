@@ -1,88 +1,181 @@
-# 桌面版
+# Portway 桌面版
 
-基于 Wails 2，复用现有 React 界面和 Go 转发引擎。用户不需要安装 Go、Node.js 或单独运行 daemon。macOS 使用系统 WebKit，Windows 使用 WebView2，Linux 使用 WebKitGTK。
+将 SSH 转发引擎和管理界面放在一个应用中。无需单独启动 daemon，也无需安装 Go、Node.js 或系统 `ssh` 命令即可使用普通 SSH 和 `ProxyJump`。
 
-## 行为
+线路配置、SSH 认证和日志说明见 [项目 README](../README.md)。本页介绍安装使用、平台差异与桌面打包。
 
-- macOS：菜单栏常驻，显示运行中/异常线路数量，可打开主窗口、打开配置目录和退出。关闭窗口仅隐藏，转发继续；从菜单选择退出或按 Cmd+Q 才停止应用。
-- 常驻菜单每 2 秒更新线路状态与收发速率，包含已停止的线路；macOS 菜单在每条线路名称前以原生绘制的绿、黄、红、灰圆点分别表示运行中、连接中、异常和停止状态，标题不再重复显示状态文字。顶部紧凑统计视图只显示非零状态、总速率和当前连接数；线路详情使用不可点击的键值视图，去除标题中已有的重复信息，保留累计流量、连接数、转发地址和最近错误。速率按两次采样的实际时间间隔计算，首个样本或线路重启后先显示“采样中”；累计流量沿用页面的本次启动统计口径，不是历史总量。菜单只展示信息，不会自动启停线路。
-- 左上角应用菜单显式命名为 Portway；右上角常驻图标在原生启动阶段创建，不等待网页或外部字体加载。初始化结果写入配置的运行日志（默认 `logs/daemon.log`，搜索 `desktop native menus`）；创建失败会弹出错误并退出，不会静默留下无法唤回的后台应用。日志中的创建成功不代表图标未被刘海区域或第三方菜单栏管理工具遮挡。
-- Windows：任务栏通知区域常驻托盘，左键打开主窗口，右键查看与 macOS 相同的线路状态、速率和连接详情，或打开配置目录、退出应用。关闭窗口仅隐藏，转发继续；从托盘选择“退出 Portway”才停止应用。图标可能收纳在任务栏的“显示隐藏的图标”中。资源管理器重启后会重新注册图标；不额外依赖托盘软件。
-- Windows 托盘每 2 秒刷新数据，已打开菜单中的状态和流量也会更新；新增/删除线路和详情条目数量的变化在下次展开菜单时完整重建，避免刷新打断当前菜单操作。
-- Linux：独立桌面窗口，关闭窗口即退出并停止应用托管的转发，目前不创建托盘图标。
-- 页面主题可选择“跟随系统 / 浅色 / 深色”，首次使用默认跟随系统，系统主题变化时自动切换；已有浅色/深色偏好保留，可从顶部主题菜单改为跟随系统。标题栏随页面主题同步：macOS 使用与页面相同的背景；Windows 配置同色标题栏（自定义颜色取决于系统版本支持）；Linux 原生标题栏外观由桌面环境决定。
-- 退出等待连接清理、历史日志写入完成；线路启用状态保留，下次启动恢复。
-- 重复打开桌面程序会唤起已有窗口。共享配置、状态、日志的桌面端和新版 CLI daemon 使用操作系统文件锁互斥，不会同时写入，也不会自动终止另一个进程。旧版 daemon 不支持文件锁，使用桌面版前必须先手动停止。
-- 桌面后端在应用进程内运行，不启动子进程，不监听 HTTP 端口。页面 API 通过 Wails 的内置资源服务直接转发给 Go；CLI 的 `list/start/stop` 不连接桌面后端，需要使用桌面界面操作。
-- YAML、线路定义和历史日志沿用原有路径。macOS/Linux 默认 `~/.config/ssh-tunnel-manager/`；Windows 默认 `%USERPROFILE%\.config\ssh-tunnel-manager\`。支持 `XDG_CONFIG_HOME`。配置弹窗保存后退出并重开应用生效；监听地址仅用于独立 HTTP daemon，在桌面模式下不生效。
-- macOS/Linux 创建私有权限的配置与日志文件；Windows 访问权限由目录继承的 ACL 控制，Unix `0600` 权限位不能代表 Windows 的访问控制。请将配置保存在自己的用户目录，不要放入公共共享目录。
-- 普通 SSH、ProxyJump、识别的 `ProxyCommand ssh -W` 仍然不依赖系统 ssh。自定义 ProxyCommand 继续依赖外部命令；Windows 不提供 `/bin/sh`，不要直接使用 Unix 自定义代理命令。当前 ssh-agent 通过 `SSH_AUTH_SOCK` 的 Unix socket 接入，不支持 Windows OpenSSH 的命名管道 agent；Windows 可使用未加密密钥或密码。
+## 安装与启动
 
-## 构建环境
+使用构建产物时，按平台选择对应包；从源码生成这些文件的方法见 [开发与构建](#开发与构建)。
 
-构建者需要 Go 1.25+、Node.js 20+ / npm；最终用户不需要这些工具。桌面依赖放在独立 `desktop/go.mod` 中，CLI 保持原来的依赖和构建入口。
+| 平台 | 安装方式 | 运行依赖 |
+| --- | --- | --- |
+| macOS 12+ | 打开 DMG 或解压 ZIP，将 `Portway.app` 放入“应用程序” | 系统 WebKit；通用包兼容 Intel / Apple Silicon |
+| Windows 10/11 | 运行 `-installer.exe`，或直接使用独立 `.exe` | WebView2；缺少时引导安装，需要联网 |
+| Linux | Ubuntu 推荐安装 `.deb`；其他发行版可使用 `.tar.gz` | GTK3、WebKitGTK 4.1 |
 
-- macOS：macOS 12+，Xcode Command Line Tools。可直接生成 `.app` 和 ZIP，支持 Intel / Apple Silicon 通用包，不需要安装 Wails CLI。
-- Windows：Windows 10/11。安装 Wails CLI；生成安装向导还需要 NSIS。打包后的程序内嵌 WebView2 引导安装器，缺少运行时时会提示安装，安装运行时需要联网，并非完整离线运行时包。
-- Linux：目标构建环境为 Ubuntu 24.04 / 同等 GTK3 + WebKitGTK 4.1 环境。需要 `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`，安装 Wails CLI。`.deb` 由包管理器安装运行依赖；其他发行版可使用 tar.gz，但需要自行安装兼容运行库。
+Ubuntu 安装示例：
 
-Windows/Linux 构建工具安装一次即可：
+```bash
+sudo apt install ./ssh-tunnel-manager-linux-amd64.deb
+```
 
-```sh
+tar.gz 解压后可运行 `usr/bin/ssh-tunnel-manager`，但需自行安装运行依赖。当前 Linux 构建以 Ubuntu 24.04 为目标，不保证兼容所有发行版。
+
+本地与 CI 构建尚未提供公开分发签名：macOS 使用 ad-hoc 签名，未做 Developer ID 公证；Windows 未做 Authenticode 签名。系统可能显示来源或信誉警告，请先确认文件来源可信。
+
+首次启动后，点击“新建线路”即可配置转发。更新应用前，请通过菜单中的“退出 Portway”结束旧进程，再打开新版本；仅关闭 macOS / Windows 窗口不会退出。
+
+## 窗口与后台运行
+
+| 操作 | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| 关闭窗口 | 隐藏窗口，转发继续 | 隐藏窗口，转发继续 | 退出应用，停止转发 |
+| 返回主窗口 | 菜单栏“打开 Portway” | 左键托盘图标或托盘菜单 | 通过桌面窗口管理器 |
+| 完全退出 | 菜单“退出 Portway”或 `Cmd+Q` | 托盘“退出 Portway” | 关闭窗口 |
+| 常驻入口 | 系统菜单栏 | 任务栏通知区域 | 暂不提供 |
+
+正常退出会等待连接清理和历史记录写入。线路启用状态会保留，下次启动自动恢复；重复打开应用会唤回已有窗口。
+
+### 菜单栏与托盘
+
+macOS 菜单栏和 Windows 托盘可查看各条线路的状态、转发地址、累计流量、连接数和最近错误，数据每 2 秒更新。菜单提供：
+
+- **打开 Portway**：显示主窗口。
+- **打开日志**：显示主窗口并进入运行日志页。
+- **打开配置目录**：定位本机配置与日志文件。
+- **退出 Portway**：停止应用及其托管的转发。
+
+每条线路的子菜单提供启停快捷操作：未启用时显示“启动线路”，已启用时显示“停止线路”（包括连接中和异常重连）。执行期间显示“处理中”并禁用重复操作；操作会保存启用状态，完成后立即刷新菜单，无需先打开主窗口。
+
+SOCKS5 线路的详情子菜单还提供“复制代理地址”和“复制代理命令”，停止状态下隐藏这两个入口。macOS 复制 shell 命令，Windows 复制 PowerShell 命令，同时设置 `ALL_PROXY`、`all_proxy`、`http_proxy`、`https_proxy`。地址使用 `socks5h://`，通配监听地址会转换为本机回环地址，不会修改系统代理。
+
+macOS 图标右侧分两行显示所有线路的合计速率：上方上传、下方下载，首次采样显示 `--`。这是 Portway 的转发流量，不是系统总网速。下拉菜单直接显示线路列表，不设顶部汇总区域。
+
+### 语言与主题
+
+窗口右上角依次提供语言、主题和配置入口。语言可选自动检测、简体中文或 English，原生菜单同步切换；主题可选跟随系统、浅色或深色。偏好保存在本机 WebView 中。
+
+macOS 标题栏与页面背景同步；Windows 标题栏颜色取决于系统支持；Linux 原生标题栏由桌面环境控制。原始 SSH 错误和日志不参与翻译。
+
+## 配置与兼容性
+
+桌面版与 CLI 共用配置格式和默认数据目录：
+
+- macOS / Linux：`~/.config/ssh-tunnel-manager/`
+- Windows：`%USERPROFILE%\.config\ssh-tunnel-manager\`
+- 自定义目录：`$XDG_CONFIG_HOME/ssh-tunnel-manager/`
+
+“配置”弹窗保存到 `config.yaml`，退出并重开应用后生效。线路单独保存在 `tunnels.json`，运行日志与连接历史位于 `logs/`。完整字段和保留策略见 [配置与数据](../README.md#配置与数据)。
+
+需要注意的边界：
+
+- 桌面后端在应用进程内运行，**不监听 HTTP 端口**。YAML 的 `addr` 仅用于 CLI daemon；`portway list/start/stop` 不会连接桌面后端。
+- 桌面端和新版 CLI daemon 通过文件锁避免同时占用共享数据。切换使用方式前应退出另一端；旧版 daemon 可能不支持该锁。
+- 普通 SSH 与 `ProxyJump` 不依赖外部命令，但自定义 `ProxyCommand` 仍可能依赖 shell 和其他程序。Windows 不提供 `/bin/sh`，建议使用原生 `ProxyJump`。
+- agent 目前通过 Unix socket 接入，不支持 Windows OpenSSH 的命名管道 agent。Windows 可使用未加密私钥或密码。
+- 配置包含敏感信息，应保存在私人目录。macOS / Linux 使用私有文件权限，Windows 的访问权限由目录 ACL 控制。
+
+## 常见问题
+
+### 看不到 macOS 菜单栏图标
+
+先确认已退出旧版并打开新构建的 `Portway.app`，再检查刘海区域和第三方菜单栏管理工具是否隐藏图标。运行日志中搜索 `desktop native menus` 可查看初始化结果；创建成功不代表图标当前没有被遮挡。
+
+### 看不到 Windows 托盘图标
+
+检查任务栏“显示隐藏的图标”区域。左键图标打开窗口，右键展开菜单；资源管理器重启后应用会重新注册图标。
+
+### 启动时提示配置正在使用
+
+检查是否已有桌面实例或 CLI daemon 正在使用同一组数据。先正常退出对应进程，不要同时启动两份应用读写同一目录。
+
+## 开发与构建
+
+以下命令均从仓库根目录执行。构建需要 Go 1.25+、Node.js 20+ 和 npm，桌面 Go 依赖位于独立的 `desktop/go.mod` 中。
+
+### 平台工具
+
+| 构建平台 | 额外依赖 |
+| --- | --- |
+| macOS | Xcode Command Line Tools；不需要 Wails CLI |
+| Windows | Wails CLI；生成安装器还需 NSIS，`makensis` 在 PATH 中 |
+| Ubuntu 24.04 | Wails CLI、`build-essential`、`pkg-config`、`libgtk-3-dev`、`libwebkit2gtk-4.1-dev`；生成 `.deb` 需 `dpkg-deb` |
+
+Windows / Linux 安装 Wails CLI：
+
+```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 ```
 
-脚本优先使用 `$GOPATH/bin/wails`，也可用 `WAILS` 环境变量指定可执行文件路径。
+构建脚本优先查找 `$GOPATH/bin/wails`，也可通过 `WAILS` 指定路径。
 
-### 通用入口
+### 构建命令
 
-有 make 的环境：
-
-```sh
+```bash
+# 构建前端并打包当前平台
 make desktop
+
+# macOS：Intel + Apple Silicon 通用 ZIP
+make desktop-universal
+
+# macOS：通用 ZIP 和 DMG
+make desktop-dmg
 ```
 
-没有 make（例如 Windows PowerShell）：
+没有 make 时（例如 Windows PowerShell）：
 
-```sh
+```bash
 npm --prefix web ci
 npm --prefix web run build
 node scripts/desktop.mjs
 ```
 
-脚本只打包当前系统，Windows/Linux 应在相应系统构建。macOS 可在同一台机器上构建两种架构：
+Windows 前端构建完成后，使用 `node scripts/desktop.mjs --installer` 额外生成当前用户安装器。脚本只打包当前操作系统，Windows / Linux 应在对应平台构建。
 
-```sh
-make desktop-universal
-make desktop-dmg
-```
+`make build` 生成的是 CLI `portway`，不是桌面应用。桌面构建不会自动安装应用、启动转发或修改 SSH 配置。
 
-Windows 安装向导（NSIS 的 `makensis` 需在 PATH 中）：
+### 构建产物
 
-```sh
-node scripts/desktop.mjs --installer
-```
+本地可执行应用位于 `desktop/build/bin/`，分发包位于 `dist/desktop/`：
 
-### 输出
+| 平台 | 应用 | 分发格式 |
+| --- | --- | --- |
+| macOS | `Portway.app` | `.zip`，可选 `.dmg` |
+| Windows | `ssh-tunnel-manager.exe` | 独立 `.exe`，可选 `-installer.exe` |
+| Linux | `ssh-tunnel-manager` | `.tar.gz`；有 `dpkg-deb` 时同时生成 `.deb` |
 
-- macOS 应用：`desktop/build/bin/Portway.app`。旧的 `SSH Tunnel Manager.app` 不会自动删除；更新后请退出旧进程再打开 `Portway.app`。
-- 可分发文件：`dist/desktop/`；macOS 为 ZIP（可选 DMG），Windows 为 `.exe`（可选当前用户安装器），Linux 为 `.tar.gz` 和 `.deb`（需 `dpkg-deb`）。
-- Linux tar.gz 包含 `usr/` 目录结构；可解压后运行 `usr/bin/ssh-tunnel-manager`。Ubuntu 推荐 `sudo apt install ./ssh-tunnel-manager-linux-amd64.deb`，让包管理器处理依赖。
-- 现有 `make build` 仍只生成 CLI 的 `tunnel`，不会被改成桌面程序。
+包名使用 `ssh-tunnel-manager-<系统>-<架构>` 前缀，macOS 通用包架构为 `universal`。公开分发前仍需单独完成签名、公证等发布步骤。
 
-构建不会安装应用、启动转发或修改真实 SSH 配置。macOS 包做本机 ad-hoc 签名，不包含 Developer ID 公证；公开分发仍需自行签名、公证后重新制作归档。Windows 未做 Authenticode 签名，SmartScreen 可能提示未知发布者。
+### 测试
 
-## CI
+先构建前端资源，再运行：
 
-`.github/workflows/desktop.yml` 使用原生 macOS、Windows、Ubuntu runner 测试并生成桌面安装包与 `portway` 命令行程序，上传为 `portway-*` Actions artifacts；macOS CLI 是 amd64/arm64 universal binary，Windows 和 Linux CLI 是 amd64。workflow 可手动运行或推送 `v*` 标签触发，不会自动发布 GitHub Release，也没有签名凭据。
-
-本地可以验证后端与桌面传输（不会启动 GUI）：
-
-```sh
+```bash
+npm --prefix web test
 go test ./...
 cd desktop
 go test -tags production,webkit2_41 ./...
-go test ssh-tunnel-manager/internal/daemon ssh-tunnel-manager/internal/tunnel
 ```
 
-完整验收还需在三端实际打开应用，检查创建线路、SSH 连接、配置保存、历史恢复；macOS / Windows 额外检查关闭窗口后转发继续、菜单栏/托盘重新打开及退出后端口释放。Windows 还需检查键盘访问托盘菜单、资源管理器重启后的图标恢复和隐藏图标区域。Linux 原生窗口需要图形会话；无图形环境的 Go 测试不等于窗口验收。
+自动化测试不代替实际窗口验收。发布前应检查线路创建、真实 SSH 连接、配置保存、历史恢复，以及 macOS / Windows 的关闭窗口继续转发、菜单唤回和退出释放端口。
+
+macOS 速率图标还可单独做离屏绘图检查，不启动应用或 SSH 线路（在仓库根目录执行）：
+
+```bash
+clang -fobjc-arc -framework Cocoa -framework CoreText desktop/platform/tests/status_image.m -o /tmp/portway-status-image-test
+/tmp/portway-status-image-test /tmp/portway-status-image.png
+```
+
+线路子菜单的启停、忙碌状态与复制入口可做原生离屏检查（不启动应用或连接 SSH）：
+
+```bash
+clang -fobjc-arc -framework Cocoa -framework CoreText desktop/platform/tests/menu_actions.m -o /tmp/portway-menu-actions-test
+/tmp/portway-menu-actions-test
+```
+
+### CI 与发布
+
+[Desktop and CLI Packages](../.github/workflows/desktop.yml) 工作流在相关路径的 Pull Request、推送 `v*` 标签或手动触发时运行，使用 macOS、Windows 和 Ubuntu runner 测试并打包。
+
+产物上传到 GitHub Actions 的 `portway-*` artifacts，包含桌面包与 CLI；macOS 为通用包，Windows / Linux 为 amd64。**目前不会自动创建 GitHub Release，也未配置分发签名凭据。**
