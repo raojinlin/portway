@@ -15,9 +15,9 @@ func TestTrayProxyCommands(t *testing.T) {
 		":1080": "socks5h://127.0.0.1:1080", "[::]:1080": "socks5h://[::1]:1080", "proxy.local:8080": "socks5h://proxy.local:8080",
 	} {
 		url, command := trayProxy(listen)
-		wantCommand := "export ALL_PROXY='" + want + "' all_proxy='" + want + "' http_proxy='" + want + "' https_proxy='" + want + "'"
+		wantCommand := "export all_proxy='" + want + "' http_proxy='" + want + "' https_proxy='" + want + "'"
 		if runtime.GOOS == "windows" {
-			wantCommand = "$env:ALL_PROXY='" + want + "'; $env:all_proxy=$env:ALL_PROXY; $env:http_proxy=$env:ALL_PROXY; $env:https_proxy=$env:ALL_PROXY"
+			wantCommand = "$env:all_proxy='" + want + "'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy"
 		}
 		if url != want || command != wantCommand {
 			t.Fatalf("%s: %q %q", listen, url, command)
@@ -36,6 +36,9 @@ func TestProxyActionsOnlyForSOCKS(t *testing.T) {
 		for _, state := range []string{"running", "stopped", "starting", "error", "stopped", "running", "unknown"} {
 			result := sampler.sample([]daemon.TunnelView{{Status: tunnel.Status{Name: "example", State: state}, Direction: direction, LocalListen: "127.0.0.1:1080"}}, time.Now())
 			want := direction == "dynamic" && state != "stopped" && state != "unknown"
+			if result.Lines[0].ShowHistory != (direction == "dynamic") {
+				t.Fatal("history navigation lost on stopped SOCKS tunnel")
+			}
 			if line := result.Lines[0]; (line.ProxyURL != "") != want || (line.ProxyCommand != "") != want {
 				t.Fatalf("%s/%s: %+v", direction, state, line)
 			}

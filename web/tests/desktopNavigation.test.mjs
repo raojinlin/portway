@@ -40,3 +40,28 @@ test('regular browser without desktop runtime remains usable', () => {
   runInNewContext(compiled, { exports: api, window: {} })
   assert.doesNotThrow(() => api.listenForDesktopNavigation(() => assert.fail())())
 })
+
+test('connection navigation preserves names and history, rejects malformed requests', () => {
+  let listener
+  const opened = [], emitted = []
+  const api = {}
+  const runtime = {
+    EventsOn(_name, callback) { listener = callback; return () => {} },
+    EventsEmit(name, ...args) { emitted.push([name, ...args]) },
+  }
+  runInNewContext(compiled, { exports: api, window: { runtime } })
+  api.listenForDesktopNavigation(() => assert.fail('unexpected log navigation'), target => opened.push(target))
+  for (const name of ['stopped SOCKS', '线路 / test']) {
+    const target = { page: 'connections', name, showHistory: true }
+    listener(target)
+    assert.equal(opened.at(-1).name, name)
+    assert.equal(opened.at(-1).showHistory, true)
+    assert.deepEqual(emitted.at(-1), ['desktop:navigation-applied', target])
+  }
+  listener({ page: 'connections', name: 'local', showHistory: false })
+  assert.equal(opened.at(-1).showHistory, false)
+  const count = emitted.length
+  for (const invalid of [null, {}, { page: 'connections' }, { page: 'connections', name: '', showHistory: true }, { page: 'connections', name: 'test', showHistory: 'true' }]) listener(invalid)
+  assert.equal(opened.length, 3)
+  assert.equal(emitted.length, count)
+})

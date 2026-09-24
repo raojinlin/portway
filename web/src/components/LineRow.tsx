@@ -17,6 +17,8 @@ import ConnectionModal from './ConnectionModal'
 import { useI18n } from '../I18n'
 import type { Translate } from '../locale'
 import ProxyCommandModal from './ProxyCommandModal'
+import ServiceIcon from './ServiceIcon'
+import { resolveServiceIcon, serviceNames } from '../serviceIcon'
 
 const statusLabels = (tr: Translate): Record<TunnelState, string> => ({
   running: tr("运行中"),
@@ -58,6 +60,7 @@ interface Props {
 export default function LineRow({ tunnel: t, onChanged, onEdit }: Props) {
   const { tr } = useI18n()
   const STATUS_LABEL = statusLabels(tr)
+  const service = resolveServiceIcon(t.service_icon, t.direction, t.forward_address || '')
   const DIRECTION_LABEL = directionLabels(tr)
   const [proxyOpen, setProxyOpen] = useState(false)
   const { message, modal } = AntApp.useApp()
@@ -128,6 +131,7 @@ export default function LineRow({ tunnel: t, onChanged, onEdit }: Props) {
           <div className="line-identity">
             <div>
               <div className="line-title-row">
+                <Tooltip title={serviceNames[service]}><span><ServiceIcon kind={service} /></span></Tooltip>
                 <h3>{t.Name}</h3>
                 <span className="direction-chip">{DIRECTION_LABEL[t.direction] ?? DIRECTION_LABEL.local}</span>
               </div>

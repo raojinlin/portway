@@ -30,7 +30,7 @@ func trayProxy(listen string) (string, string) {
 	}
 	url := "socks5h://" + net.JoinHostPort(host, strconv.Itoa(port))
 	if runtime.GOOS == "windows" {
-		return url, "$env:ALL_PROXY='" + url + "'; $env:all_proxy=$env:ALL_PROXY; $env:http_proxy=$env:ALL_PROXY; $env:https_proxy=$env:ALL_PROXY"
+		return url, "$env:all_proxy='" + url + "'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy"
 	}
-	return url, "export ALL_PROXY='" + url + "' all_proxy='" + url + "' http_proxy='" + url + "' https_proxy='" + url + "'"
+	return url, "export all_proxy='" + url + "' http_proxy='" + url + "' https_proxy='" + url + "'"
 }

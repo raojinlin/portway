@@ -37,6 +37,7 @@ const (
 
 // Config describes a single tunnel.
 type Config struct {
+	ServiceIcon    string // Empty/auto detects the forwarded service; otherwise a built-in icon ID.
 	Name           string
 	Direction      Direction // local (default) | remote | dynamic
 	LocalListen    string    // local bind address; used by local and dynamic
@@ -68,6 +69,9 @@ func (c Config) direction() Direction {
 // It's used both by Start (in-process) and by the daemon's HTTP API, so the
 // required-field rules for each direction live in exactly one place.
 func ValidateConfig(cfg Config) error {
+	if !ValidServiceIcon(cfg.ServiceIcon) {
+		return fmt.Errorf("invalid service_icon %q", cfg.ServiceIcon)
+	}
 	if cfg.Name == "" {
 		return errors.New("name is required")
 	}

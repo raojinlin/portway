@@ -35,6 +35,9 @@ func TestTrayRatesAndDetails(t *testing.T) {
 	if !strings.Contains(result.Lines[0].Title, "↓ 1.0 KiB/s  ↑ 512 B/s") {
 		t.Fatalf("rate did not use actual elapsed time: %+v", result)
 	}
+	if result.Lines[0].RateText != "↓ 1.0 KiB/s  ↑ 512 B/s" {
+		t.Fatal("missing separate rate column")
+	}
 	if !strings.Contains(result.Traffic, "2 连接") || !strings.Contains(result.Traffic, "1.0 KiB/s") {
 		t.Fatal(result.Traffic)
 	}
@@ -164,6 +167,31 @@ func TestTrayFormatting(t *testing.T) {
 	}
 	if traySummary(nil, "zh") != "暂无线路" || traySummary(map[string]int{"running": 2, "error": 1}, "zh") != "运行 2 · 异常 1" {
 		t.Fatal("summary did not omit empty states")
+	}
+}
+
+func TestTrayServiceIconsFollowTargetAndPreference(t *testing.T) {
+	for _, test := range []struct{ direction, target, preference, want string }{
+		{"local", "localhost:22", "", "ssh"},
+		{"remote", "localhost:3306", "auto", "mysql"},
+		{"local", "localhost:5432", "auto", "postgresql"},
+		{"local", "localhost:80", "auto", "http"},
+		{"local", "localhost:443", "auto", "https"},
+		{"local", "localhost:5432", "redis", "redis"},
+		{"dynamic", "", "auto", "socks5"},
+		{"local", "localhost:9999", "auto", "generic"},
+	} {
+		var sampler traySampler
+		view := daemon.TunnelView{Status: tunnel.Status{Name: "service", State: "running"}, Direction: test.direction, ForwardAddress: test.target, ServiceIcon: test.preference, SSHAddress: "jump:22"}
+		line := sampler.sample([]daemon.TunnelView{view}, time.Now()).Lines[0]
+		if line.ServiceIcon != test.want || line.State != "running" {
+			t.Fatalf("%+v: %+v", test, line)
+		}
+		view.ServiceIcon, view.State = "rdp", "stopped"
+		line = sampler.sample([]daemon.TunnelView{view}, time.Now()).Lines[0]
+		if line.ServiceIcon != "rdp" || line.State != "stopped" {
+			t.Fatal("icon preference or stopped state was lost")
+		}
 	}
 }
 

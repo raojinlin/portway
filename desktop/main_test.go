@@ -24,7 +24,7 @@ func TestNativeMenusStartWithoutDOMReady(t *testing.T) {
 	updates := make(chan platform.TraySnapshot, 1)
 	err := a.startDesktop(context.Background(), nativeMenus{
 		start: func(title string, actions platform.TrayActions) error {
-			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.Copy == nil || actions.SetEnabled == nil {
+			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.Copy == nil || actions.SetEnabled == nil || actions.Connections == nil {
 				t.Fatal("missing native title or menu actions")
 			}
 			if a.service == nil {
@@ -111,6 +111,33 @@ func TestLogNavigationRemainsPendingUntilApplied(t *testing.T) {
 	a.navigationApplied("activity")
 	if a.pendingLogs {
 		t.Fatal("applied navigation would replay on reload")
+	}
+}
+
+func TestConnectionNavigationKeepsLatestTargetUntilApplied(t *testing.T) {
+	a := &application{}
+	a.openConnections("first", false)
+	a.openConnections("socks / 中文", true)
+	a.navigationApplied(map[string]interface{}{"page": "connections", "name": "first", "showHistory": false})
+	if a.pendingConnections == nil || a.pendingConnections.Name != "socks / 中文" || !a.pendingConnections.ShowHistory {
+		t.Fatal("stale acknowledgement discarded latest connection target")
+	}
+	a.navigationApplied("activity")
+	if a.pendingConnections == nil {
+		t.Fatal("log acknowledgement discarded connections")
+	}
+	a.navigationApplied(map[string]interface{}{"page": "connections", "name": "socks / 中文", "showHistory": true})
+	if a.pendingConnections != nil {
+		t.Fatal("applied connection navigation retained")
+	}
+	a.openLogs()
+	a.openConnections("stopped", true)
+	if a.pendingLogs || a.pendingConnections == nil {
+		t.Fatal("connections did not replace log navigation")
+	}
+	a.openLogs()
+	if !a.pendingLogs || a.pendingConnections != nil {
+		t.Fatal("logs did not replace connection navigation")
 	}
 }
 

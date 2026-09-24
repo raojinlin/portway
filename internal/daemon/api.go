@@ -11,6 +11,7 @@ import (
 // human-friendly strings (e.g. "30s") so both the CLI and the web UI can
 // send plain text.
 type TunnelRequest struct {
+	ServiceIcon              string `json:"service_icon,omitempty"`
 	Name                     string `json:"name"`
 	Direction                string `json:"direction,omitempty"` // "local" (default), "remote", or "dynamic"
 	LocalListen              string `json:"local_listen,omitempty"`
@@ -65,6 +66,7 @@ func (r TunnelRequest) toConfig() (tunnel.Config, error) {
 	}
 
 	cfg := tunnel.Config{
+		ServiceIcon:              r.ServiceIcon,
 		Name:                     r.Name,
 		Direction:                direction,
 		LocalListen:              r.LocalListen,
@@ -91,6 +93,8 @@ func (r TunnelRequest) toConfig() (tunnel.Config, error) {
 // a non-secret summary of its configuration. Passwords are never included.
 type TunnelView struct {
 	tunnel.Status
+	ServiceIcon              string `json:"service_icon"`
+	ResolvedServiceIcon      string `json:"resolved_service_icon"`
 	Enabled                  bool   `json:"enabled"`
 	Direction                string `json:"direction"`
 	LocalListen              string `json:"local_listen"`
@@ -113,6 +117,8 @@ func newTunnelView(cfg tunnel.Config, enabled bool, status tunnel.Status) Tunnel
 		direction = tunnel.DirectionLocal
 	}
 	return TunnelView{
+		ServiceIcon:              cfg.ServiceIcon,
+		ResolvedServiceIcon:      cfg.ResolvedServiceIcon(),
 		Status:                   status,
 		Enabled:                  enabled,
 		Direction:                string(direction),

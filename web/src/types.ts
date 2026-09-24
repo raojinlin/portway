@@ -8,6 +8,8 @@ export type Direction = 'local' | 'remote' | 'dynamic'
 export type TunnelState = 'starting' | 'running' | 'stopped' | 'error'
 
 export interface TunnelView {
+  service_icon?: string
+  resolved_service_icon?: string
   // from tunnel.Status (embedded, no json tags -> Go field names)
   Name: string
   State: TunnelState
@@ -35,6 +37,7 @@ export interface TunnelView {
 }
 
 export interface TunnelRequest {
+  service_icon?: string
   name: string
   direction?: Direction
   local_listen?: string
@@ -122,4 +125,10 @@ export interface DaemonConfigView {
   path: string
   exists: boolean
   restart_required: boolean
+}
+export interface AutostartStatus {
+  supported: boolean
+  enabled: boolean
+  needs_update: boolean
+  reason?: string
 }

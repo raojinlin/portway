@@ -58,13 +58,19 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.SSHPassword == "" {
 		req.SSHPassword = oldEntry.Config.SSHPassword
 	}
+	if req.ServiceIcon == "" {
+		req.ServiceIcon = oldEntry.Config.ServiceIcon
+	}
 	cfg, err := req.toConfig()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if oldEntry.Enabled {
+	previousConfig := oldEntry.Config
+	previousConfig.ServiceIcon = cfg.ServiceIcon
+	restart := oldEntry.Enabled && previousConfig != cfg
+	if restart {
 		_ = s.manager.Remove(name)
 		if err := s.manager.Add(s.tunnelContext(), cfg); err != nil {
 			_ = s.manager.Add(s.tunnelContext(), oldEntry.Config)
@@ -76,7 +82,7 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	s.state.Tunnels[name] = store.Entry{Config: cfg, Enabled: oldEntry.Enabled}
 	if err := s.store.Save(s.state); err != nil {
 		s.state.Tunnels[name] = oldEntry
-		if oldEntry.Enabled {
+		if restart {
 			_ = s.manager.Remove(name)
 			_ = s.manager.Add(s.tunnelContext(), oldEntry.Config)
 		}

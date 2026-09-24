@@ -16,6 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"ssh-tunnel-manager/desktop/autostart"
 	"ssh-tunnel-manager/desktop/platform"
 	"ssh-tunnel-manager/internal/daemon"
 )
@@ -24,18 +25,19 @@ const applicationTitle = "Portway"
 const applicationVersion = "0.1.0"
 
 type application struct {
-	mu          sync.RWMutex
-	ctx         context.Context
-	service     *daemon.Service
-	problem     error
-	ready       chan struct{}
-	cancel      context.CancelFunc
-	done        <-chan struct{}
-	nativeMu    sync.Mutex
-	language    string
-	pendingLogs bool
-	trayPending map[string]bool
-	trayRefresh chan struct{}
+	mu                 sync.RWMutex
+	ctx                context.Context
+	service            *daemon.Service
+	problem            error
+	ready              chan struct{}
+	cancel             context.CancelFunc
+	done               <-chan struct{}
+	nativeMu           sync.Mutex
+	language           string
+	pendingLogs        bool
+	pendingConnections *connectionNavigation
+	trayPending        map[string]bool
+	trayRefresh        chan struct{}
 }
 
 func (a *application) startup(ctx context.Context) {
@@ -68,6 +70,10 @@ func (a *application) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 		return
 	}
+	if r.URL.Path == "/api/desktop/autostart" {
+		autostartHandler(autostart.Get, autostart.Set).ServeHTTP(w, r)
+		return
+	}
 	// Wails owns this in-process transport. Its webview uses a custom origin,
 	// not the public HTTP daemon's http/https origin; do not weaken HTTP checks.
 	r = r.Clone(r.Context())
@@ -93,6 +99,25 @@ func (a *application) domReady(ctx context.Context) {
 func (a *application) openLogs() {
 	a.mu.Lock()
 	a.pendingLogs = true
+	a.pendingConnections = nil
+	a.mu.Unlock()
+	a.show()
+	a.sendNavigation()
+}
+
+type connectionNavigation struct {
+	Page        string `json:"page"`
+	Name        string `json:"name"`
+	ShowHistory bool   `json:"showHistory"`
+}
+
+func (a *application) openConnections(name string, showHistory bool) {
+	if name == "" {
+		return
+	}
+	a.mu.Lock()
+	a.pendingLogs = false
+	a.pendingConnections = &connectionNavigation{Page: "connections", Name: name, ShowHistory: showHistory}
 	a.mu.Unlock()
 	a.show()
 	a.sendNavigation()
@@ -100,20 +125,27 @@ func (a *application) openLogs() {
 
 func (a *application) sendNavigation() {
 	a.mu.RLock()
-	ctx, pending := a.ctx, a.pendingLogs
+	ctx, pending, connections := a.ctx, a.pendingLogs, a.pendingConnections
 	a.mu.RUnlock()
 	if ctx != nil && pending {
 		wruntime.EventsEmit(ctx, "desktop:navigate", "activity")
+	} else if ctx != nil && connections != nil {
+		wruntime.EventsEmit(ctx, "desktop:navigate", connections)
 	}
 }
 
 func (a *application) navigationApplied(data ...interface{}) {
-	if len(data) != 1 || data[0] != "activity" {
+	if len(data) != 1 {
 		return
 	}
 	a.mu.Lock()
-	a.pendingLogs = false
-	a.mu.Unlock()
+	defer a.mu.Unlock()
+	if page, ok := data[0].(string); ok && page == "activity" {
+		a.pendingLogs = false
+	}
+	if page, ok := data[0].(map[string]interface{}); ok && a.pendingConnections != nil && page["page"] == "connections" && page["name"] == a.pendingConnections.Name && page["showHistory"] == a.pendingConnections.ShowHistory {
+		a.pendingConnections = nil
+	}
 }
 
 func (a *application) languageEvent(data ...interface{}) {
@@ -164,6 +196,7 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 	service.Logger().Info("desktop native menus initializing", "app", applicationTitle, "platform", runtime.GOOS, "executable", executable)
 	if err := menus.start(applicationTitle, platform.TrayActions{
 		Show: a.show, Quit: func() { wruntime.Quit(ctx) }, Directory: func() { platform.OpenDirectory(service.ConfigDirectory()) }, Logs: a.openLogs,
+		Connections: a.openConnections,
 		SetEnabled: func(name string, enabled bool) {
 			if err := a.changeTunnel(name, enabled); err != nil {
 				a.mu.RLock()
@@ -269,6 +302,7 @@ func (a *application) windowOptions() *options.App {
 	return &options.App{
 		Title: applicationTitle, Width: 1180, Height: 800, MinWidth: 760, MinHeight: 540,
 		HideWindowOnClose: platform.HasTray(),
+		StartHidden:       autostart.LaunchHidden(os.Args[1:], platform.HasTray()),
 		BackgroundColour:  options.NewRGB(243, 245, 247),
 		// Wails leaves the native zoom button disabled when Mac options are nil.
 		Mac: &mac.Options{DisableZoom: false, About: &mac.AboutInfo{
@@ -309,7 +343,11 @@ func (a *application) windowOptions() *options.App {
 				wruntime.Quit(ctx)
 			}
 		}, OnDomReady: a.domReady, OnShutdown: a.shutdown,
-		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "ssh-tunnel-manager-desktop", OnSecondInstanceLaunch: func(options.SecondInstanceData) { a.show() }},
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "ssh-tunnel-manager-desktop", OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
+			if !autostart.LaunchHidden(data.Args, platform.HasTray()) {
+				a.show()
+			}
+		}},
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"ssh-tunnel-manager/desktop/platform"
 	"ssh-tunnel-manager/internal/daemon"
+	"ssh-tunnel-manager/internal/tunnel"
 )
 
 type traySampler struct {
@@ -44,10 +45,13 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 		totalOut += outRate
 		rates := trayRates(inRate, outRate, sampled, s.language)
 		line := platform.TrayLine{
-			Enabled: view.Enabled,
-			Name:    view.Name,
-			State:   state,
-			Title:   fmt.Sprintf("%s   %s", trayShort(view.Name, 28), rates),
+			ShowHistory: view.Direction == "dynamic",
+			RateText:    rates,
+			ServiceIcon: (tunnel.Config{ServiceIcon: view.ServiceIcon, Direction: tunnel.Direction(view.Direction), ForwardAddress: view.ForwardAddress}).ResolvedServiceIcon(),
+			Enabled:     view.Enabled,
+			Name:        view.Name,
+			State:       state,
+			Title:       fmt.Sprintf("%s   %s", trayShort(view.Name, 28), rates),
 			Details: []string{
 				fmt.Sprintf(tr("累计：↓ %s  ↑ %s", "Total: ↓ %s  ↑ %s"), trayBytes(float64(view.BytesIn)), trayBytes(float64(view.BytesOut))),
 				fmt.Sprintf(tr("当前连接：%d", "Connections: %d"), view.ActiveConns),

@@ -3,6 +3,7 @@ import { Alert, App, Button, Collapse, Form, Input, InputNumber, Modal, Select, 
 import { api } from '../api'
 import type { DaemonConfig, DaemonConfigView } from '../types'
 import { useI18n } from '../I18n'
+import AutostartSettings from './AutostartSettings'
 
 export default function ConfigModal({ onClose }: { onClose: () => void }) {
   const { tr } = useI18n()
@@ -56,6 +57,7 @@ export default function ConfigModal({ onClose }: { onClose: () => void }) {
             message={view.restart_required ? tr('文件配置与当前运行配置不同') : tr(view.desktop ? '保存后退出并重新打开应用生效' : '保存后重启 daemon 生效')}
             description={view.desktop ? tr("桌面应用直接托管后端，不开放 HTTP 端口。保存不会中断线路；macOS / Windows 关闭窗口仅隐藏，请从应用菜单或托盘菜单选择退出后再打开。") : tr("保存不会中断线路或自动重启。启动参数优先于 YAML；要使用文件中的值，请移除对应的命令行覆盖参数。手动编辑 YAML 后同样需要重启。")} />
         </>}
+        {view?.desktop && <AutostartSettings />}
         <Form form={form} layout="vertical" onFinish={save} disabled={loading || saving || !view}>
           <div className="form-section">
             <h3 className="form-section-heading">{tr("服务")}</h3>

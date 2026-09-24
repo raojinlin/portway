@@ -16,6 +16,7 @@
 ## 主要功能
 
 - **线路管理**：创建、编辑、启停和删除线路，支持 SSH config 别名、多级跳板、保活与断线重连。
+- **服务图标**：按目标端口自动识别 SSH、MySQL、PostgreSQL、HTTP/HTTPS、Redis、MongoDB 和 RDP，SOCKS5 使用代理图标。新增或编辑线路时可手动选择；非标准端口可覆盖识别结果，仅修改图标不会重启线路。
 - **连接与流量**：查看线路累计收发量、活动连接，以及每个连接的来源、目标、持续时间和流量。
 - **日志与历史**：筛选运行日志和当前连接，查看落盘保存的 SOCKS5 历史请求及失败原因。
 - **代理快捷操作**：复制 SOCKS5 地址或 Bash/Zsh、PowerShell 代理命令。
@@ -90,7 +91,7 @@ go build -o portway ./cmd/tunnel
 
 远程监听是否允许外部访问，还取决于 SSH 服务器的转发策略和 `GatewayPorts` 配置。绑定 `0.0.0.0` 前，请确认暴露范围和防火墙规则。
 
-SOCKS5 支持无认证的 TCP CONNECT，不支持 UDP 转发，建议仅监听回环地址。页面可复制 `socks5h://` 地址或代理命令，同时设置 `ALL_PROXY`、`all_proxy`、`http_proxy`、`https_proxy`。命令只影响当前终端中支持这些变量及 SOCKS5 的程序，不会设置系统代理。复制结果默认用于运行 Portway 的机器，远程浏览器用户需自行确认地址是否可达。
+SOCKS5 支持无认证的 TCP CONNECT，不支持 UDP 转发，建议仅监听回环地址。页面可复制 `socks5h://` 地址或代理命令，同时设置 `all_proxy`、`http_proxy`、`https_proxy`。命令只影响当前终端中支持这些变量及 SOCKS5 的程序，不会设置系统代理。复制结果默认用于运行 Portway 的机器，远程浏览器用户需自行确认地址是否可达。
 
 ## SSH 认证与安全
 

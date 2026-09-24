@@ -136,6 +136,7 @@ button:focus-visible, [tabindex='0']:focus-visible {
 .line-modal .ant-modal-body { max-height: min(70vh, 720px); overflow-y: auto; padding: 20px 20px 4px; }
 .line-modal .ant-modal-footer { margin: 0; padding: 12px 20px; border-top: 1px solid var(--rule); }
 .form-section { margin-bottom: 16px; }
+.config-modal .autostart-settings { margin-top: 16px; }
 .form-section-heading { margin: 0 0 14px; font-size: 13px; font-weight: 600; }
 .field-label { display: inline-flex; align-items: center; gap: 6px; }
 .field-label .anticon { color: var(--ink-3); cursor: help; font-size: 12px; }
@@ -164,6 +165,14 @@ button:focus-visible, [tabindex='0']:focus-visible {
 .line-modal .host-key-warning .ant-alert-icon { margin-inline-end: 8px; font-size: 16px; }
 .ant-dropdown .ant-dropdown-menu { border: 1px solid var(--rule); }
 .proxy-command { margin-top: 16px; font-family: 'IBM Plex Mono', monospace; }
+.service-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface-2); color: var(--ink-2); font-size: 17px; vertical-align: middle; }
+.service-icon small { position: absolute; bottom: -2px; right: -3px; padding: 0 2px; border-radius: 2px; background: var(--surface); font: 600 8px/1.3 var(--mono); color: var(--ink); }
+.service-icon--mysql, .service-icon--postgresql { color: var(--accent); }
+.service-icon--redis { color: var(--red); }
+.service-icon--mongodb, .service-icon--https { color: var(--dot-running); }
+.service-icon-option { display: inline-flex; align-items: center; gap: 10px; }
+.service-icon-option .service-icon { width: 24px; height: 24px; font-size: 15px; }
+.service-icon-select { max-width: 320px; }
 
 .page-navigation { display: flex; gap: 24px; border-bottom: 1px solid var(--rule); }
 .page-navigation button { display: flex; align-items: center; gap: 8px; padding: 14px 0 12px; border: 0; border-bottom: 2px solid transparent; color: var(--ink-2); background: transparent; cursor: pointer; font-size: 13px; }

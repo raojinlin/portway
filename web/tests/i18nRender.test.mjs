@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,10 +29,7 @@ function ui(language, queryState) {
         if (!id.startsWith('.')) return require(id)
         const resolved = path.resolve(path.dirname(filename), id)
         if (path.extname(resolved)) return load(resolved)
-        try { return load(resolved + '.tsx') } catch (error) {
-          if (error.code !== 'ENOENT') throw error
-          return load(resolved + '.ts')
-        }
+        return load(resolved + (existsSync(resolved + '.tsx') ? '.tsx' : '.ts'))
       },
       window: { localStorage: { getItem: () => language }, matchMedia: () => ({ matches: false }) },
       navigator: { languages: [language], language, platform: 'MacIntel' },
@@ -80,6 +77,28 @@ test('proxy copy action is hidden for stopped lines and non-SOCKS routes', () =>
         assert.equal(html.includes(language === 'en' ? 'Copy proxy command' : '复制代理命令'), expected, `${language}/${direction}/${state}`)
       }
     }
+  }
+})
+
+test('autostart setting renders localized label and immediate-save guidance', () => {
+  for (const language of ['zh', 'en']) {
+    const html = ui(language)('components/AutostartSettings.tsx')
+    assert.ok(html.includes(language === 'en' ? 'Start at login' : '开机自启'))
+    assert.ok(html.includes(language === 'en' ? 'Changes save immediately' : '开关立即保存'))
+    assert.ok(html.includes('role="switch"'))
+    assert.ok(html.includes('aria-checked="false"'))
+    if (language === 'en') assert.doesNotMatch(html, /[\p{Script=Han}]/u)
+  }
+})
+
+test('line service badges render automatic and manual choices', () => {
+  const render = ui('en')
+  for (const [preference, target, expected] of [['auto', 'localhost:5432', 'PostgreSQL'], ['mysql', 'localhost:9999', 'MySQL'], ['', 'localhost:22', 'SSH']]) {
+    const html = render('components/LineRow.tsx', {
+      tunnel: { Name: 'service', State: 'stopped', direction: 'local', service_icon: preference, forward_address: target, local_listen: 'localhost:8080', ssh_address: 'gateway', enabled: false, BytesIn: 0, BytesOut: 0 },
+      onChanged() {}, onEdit() {},
+    })
+    assert.ok(html.includes(`aria-label="${expected}"`))
   }
 })
 

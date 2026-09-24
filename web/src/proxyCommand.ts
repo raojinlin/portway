@@ -12,9 +12,9 @@ export function proxyURL(listen: string): string {
 
 export function proxyCommand(url: string, shell: ProxyShell): string {
   if (shell === 'url') return url
-  if (shell === 'powershell') return `$env:ALL_PROXY='${url.split("'").join("''")}'; $env:all_proxy=$env:ALL_PROXY; $env:http_proxy=$env:ALL_PROXY; $env:https_proxy=$env:ALL_PROXY`
+  if (shell === 'powershell') return `$env:all_proxy='${url.split("'").join("''")}'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy`
   const quoted = url.split("'").join("'\\''")
-  return `export ALL_PROXY='${quoted}' all_proxy='${quoted}' http_proxy='${quoted}' https_proxy='${quoted}'`
+  return `export all_proxy='${quoted}' http_proxy='${quoted}' https_proxy='${quoted}'`
 }
 
 export async function copyText(text: string): Promise<void> {

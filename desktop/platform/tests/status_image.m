@@ -5,6 +5,7 @@
 
 void stmMenuAction(int action) {}
 void stmTunnelAction(const char *name, int enabled) {}
+void stmConnectionsAction(const char *name, int history) {}
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {

@@ -21,6 +21,13 @@ import (
 
 var events = make(chan int, 8)
 var tunnelEvents = make(chan TunnelAction, 8)
+
+type connectionEvent struct {
+	name    string
+	history bool
+}
+
+var connectionEvents = make(chan connectionEvent, 8)
 var stopped = make(chan struct{})
 var stopOnce sync.Once
 var startOnce sync.Once
@@ -45,6 +52,14 @@ func stmMenuAction(action C.int) {
 func stmTunnelAction(name *C.char, enabled C.int) {
 	select {
 	case tunnelEvents <- TunnelAction{Name: C.GoString(name), Enabled: enabled != 0}:
+	default:
+	}
+}
+
+//export stmConnectionsAction
+func stmConnectionsAction(name *C.char, history C.int) {
+	select {
+	case connectionEvents <- connectionEvent{name: C.GoString(name), history: history != 0}:
 	default:
 	}
 }
@@ -75,6 +90,10 @@ func Start(title string, actions TrayActions) error {
 				case action := <-tunnelEvents:
 					if actions.SetEnabled != nil {
 						go actions.SetEnabled(action.Name, action.Enabled)
+					}
+				case action := <-connectionEvents:
+					if actions.Connections != nil {
+						go actions.Connections(action.name, action.history)
 					}
 				case <-stopped:
 					return

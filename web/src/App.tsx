@@ -13,7 +13,8 @@ import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
 import ActivityPage from './components/ActivityPage'
 import { FileTextOutlined, SwapOutlined } from '@ant-design/icons'
-import { listenForDesktopNavigation } from './desktopNavigation'
+import { listenForDesktopNavigation, type ConnectionNavigation } from './desktopNavigation'
+import ConnectionModal from './components/ConnectionModal'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -26,6 +27,8 @@ function Board() {
   const [configOpen, setConfigOpen] = useState(false)
   const [page, setPage] = useState<'tunnels' | 'activity'>('tunnels')
   const [activitySession, setActivitySession] = useState(0)
+  const [lineSession, setLineSession] = useState(0)
+  const [connectionTarget, setConnectionTarget] = useState<ConnectionNavigation | null>(null)
   const [editingTunnel, setEditingTunnel] = useState<TunnelView | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -33,8 +36,16 @@ function Board() {
     setConfigOpen(false)
     setModalOpen(false)
     setEditingTunnel(null)
+    setConnectionTarget(null)
     setPage('activity')
     setActivitySession(value => value + 1)
+  }, target => {
+    setConfigOpen(false)
+    setModalOpen(false)
+    setEditingTunnel(null)
+    setPage('tunnels')
+    setLineSession(value => value + 1)
+    setConnectionTarget(target)
   }), [])
 
   const refresh = useCallback(async () => {
@@ -64,6 +75,7 @@ function Board() {
           <button type="button" aria-current={page === 'activity' ? 'page' : undefined} onClick={() => setPage('activity')}><FileTextOutlined />{tr('日志与连接')}</button>
         </nav>
         {page === 'activity' ? <ActivityPage key={activitySession} tunnels={tunnels} onConfigClick={() => setConfigOpen(true)} /> : <LineList
+          key={lineSession}
           tunnels={tunnels}
           loaded={loaded}
           onChanged={refresh}
@@ -72,6 +84,7 @@ function Board() {
       </div>
 
       {configOpen && <ConfigModal onClose={() => setConfigOpen(false)} />}
+      {connectionTarget && <ConnectionModal key={`${connectionTarget.name}:${lineSession}`} name={connectionTarget.name} showHistory={connectionTarget.showHistory} onClose={() => setConnectionTarget(null)} />}
       <AddLineModal
         open={modalOpen}
         tunnel={editingTunnel}

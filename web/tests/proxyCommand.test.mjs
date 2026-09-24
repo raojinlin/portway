@@ -29,8 +29,8 @@ test('invalid listeners and shell injection cannot produce a command', () => {
 test('generates POSIX, PowerShell and URL commands without executing anything', () => {
   const { proxyCommand } = setup()
   const url = 'socks5h://127.0.0.1:1080'
-  assert.equal(proxyCommand(url, 'posix'), `export ALL_PROXY='${url}' all_proxy='${url}' http_proxy='${url}' https_proxy='${url}'`)
-  assert.equal(proxyCommand(url, 'powershell'), `$env:ALL_PROXY='${url}'; $env:all_proxy=$env:ALL_PROXY; $env:http_proxy=$env:ALL_PROXY; $env:https_proxy=$env:ALL_PROXY`)
+  assert.equal(proxyCommand(url, 'posix'), `export all_proxy='${url}' http_proxy='${url}' https_proxy='${url}'`)
+  assert.equal(proxyCommand(url, 'powershell'), `$env:all_proxy='${url}'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy`)
   assert.equal(proxyCommand(url, 'url'), url)
 })
 

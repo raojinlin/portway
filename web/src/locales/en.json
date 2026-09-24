@@ -1,4 +1,14 @@
 {
+  "开机自启": "Start at login",
+  "登录当前系统账户后自动启动，开关立即保存，无需重启。macOS / Windows 后台常驻，Linux 显示主窗口。": "Start automatically when you sign in. Changes save immediately; no restart needed. Runs in the background on macOS / Windows and opens the main window on Linux.",
+  "此开关管理系统启动项，不写入 YAML。若被系统设置禁用，也需在系统中重新允许。": "Manages the system startup entry, separately from YAML. If disabled by your operating system, allow it again in system settings too.",
+  "请先将打包的 Portway.app 放到固定位置（建议应用程序目录），并从该位置打开。": "Move the packaged Portway.app to a permanent location (preferably Applications) and open it from there first.",
+  "当前平台或应用路径不支持开机自启。": "Start at login is unavailable for this platform or application location.",
+  "应用路径或启动项已变化，请更新启动项。": "The application path or startup entry has changed. Update the startup entry.",
+  "更新启动项": "Update startup entry",
+  "服务图标": "Service icon",
+  "自动识别：{service}": "Automatic: {service}",
+  "自动按目标服务端口识别，不使用监听端口或 SSH 跳板端口。非标准端口可手动选择；仅修改图标不会重启线路。": "Detects the target service port, not the listener or SSH gateway port. Choose manually for non-standard ports. Changing only the icon does not restart the tunnel.",
   "页面导航": "Page navigation",
   "日志与连接": "Logs & connections",
   "排查连接问题，查看运行事件与访问记录。": "Inspect runtime events and connections to troubleshoot your tunnels.",
@@ -233,6 +243,6 @@
   "监听地址无效，请先编辑线路的 SOCKS5 监听地址": "Invalid listener address. Edit the tunnel's SOCKS5 listening address first.",
   "线路尚未运行，请启动后再使用代理": "Start the tunnel before using the proxy.",
   "代理命令": "Proxy command",
-  "设置当前终端的 ALL_PROXY、all_proxy、http_proxy 和 https_proxy，不修改系统代理。程序需支持 socks5h；域名通过代理解析，程序自身配置及 NO_PROXY 可能优先。": "Sets ALL_PROXY, all_proxy, http_proxy and https_proxy in this terminal without changing the system proxy. Programs must support socks5h, which resolves DNS through the proxy. App-specific settings and NO_PROXY may take precedence.",
+  "设置当前终端的 all_proxy、http_proxy 和 https_proxy，不修改系统代理。程序需支持 socks5h；域名通过代理解析，程序自身配置及 NO_PROXY 可能优先。": "Sets all_proxy, http_proxy and https_proxy in this terminal without changing the system proxy. Programs must support socks5h, which resolves DNS through the proxy. App-specific settings and NO_PROXY may take precedence.",
   "请在 daemon 所在机器运行。若从其他机器使用，请替换为可访问的监听地址；不要将无认证的 SOCKS5 端口暴露到公网。": "Run on the daemon host. For another machine, substitute a reachable listening address. Do not expose an unauthenticated SOCKS5 port to the public internet."
 }

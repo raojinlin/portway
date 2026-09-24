@@ -3,6 +3,7 @@
 
 extern void stmMenuAction(int action);
 extern void stmTunnelAction(const char *name, int enabled);
+extern void stmConnectionsAction(const char *name, int history);
 
 @interface STMMenuTarget : NSObject
 @property(nonatomic, copy) NSString *name;
@@ -11,10 +12,16 @@ extern void stmTunnelAction(const char *name, int enabled);
 - (void)showAbout:(id)sender;
 - (void)copyProxy:(NSMenuItem *)sender;
 - (void)setTunnel:(NSMenuItem *)sender;
+- (void)viewConnections:(NSMenuItem *)sender;
 @end
 
 @implementation STMMenuTarget
 - (void)activate:(NSMenuItem *)sender { stmMenuAction((int)sender.tag); }
+- (void)viewConnections:(NSMenuItem *)sender {
+    NSDictionary *target = sender.representedObject;
+    if (![target isKindOfClass:NSDictionary.class] || ![target[@"name"] isKindOfClass:NSString.class]) return;
+    stmConnectionsAction([target[@"name"] UTF8String], [target[@"showHistory"] boolValue]);
+}
 - (void)setTunnel:(NSMenuItem *)sender {
     NSDictionary *action = sender.representedObject;
     if (![action isKindOfClass:NSDictionary.class] || ![action[@"name"] isKindOfClass:NSString.class]) return;
@@ -168,8 +175,93 @@ static NSImage *stmStateImage(NSString *state) {
     return image;
 }
 
+static NSString *stmServiceName(NSString *service) {
+    if (![service isKindOfClass:NSString.class]) return @"TCP";
+    return @{@"ssh": @"SSH", @"mysql": @"MySQL", @"postgresql": @"PostgreSQL", @"http": @"HTTP", @"https": @"HTTPS",
+        @"redis": @"Redis", @"mongodb": @"MongoDB", @"rdp": @"RDP", @"socks5": @"SOCKS5"}[service] ?: @"TCP";
+}
+
+static NSImage *stmLineImage(NSString *state, NSString *service) {
+    if (![service isKindOfClass:NSString.class]) service = @"generic";
+    NSDictionary *symbols = @{@"ssh": @"terminal", @"mysql": @"externaldrive", @"postgresql": @"externaldrive",
+        @"http": @"globe", @"https": @"lock", @"redis": @"externaldrive", @"mongodb": @"externaldrive",
+        @"rdp": @"desktopcomputer", @"socks5": @"network"};
+    NSString *tag = @{@"mysql": @"MY", @"postgresql": @"PG", @"redis": @"R", @"mongodb": @"M"}[service];
+    NSImage *symbol = [NSImage imageWithSystemSymbolName:symbols[service] ?: @"link" accessibilityDescription:nil];
+    NSImage *dot = stmStateImage(state);
+    // Keep the status dot separate from service identity; draw semantic colors
+    // at render time so the same image adapts to light and dark menus.
+    NSImage *image = [NSImage imageWithSize:NSMakeSize(32, 18) flipped:NO drawingHandler:^BOOL(NSRect bounds) {
+        [dot drawInRect:NSMakeRect(0, 4, 10, 10)];
+        NSRect iconRect = NSMakeRect(14, tag ? 7 : 0, 18, tag ? 11 : 18);
+        [NSGraphicsContext saveGraphicsState];
+        NSRectClip(iconRect);
+        [symbol drawInRect:iconRect];
+        [NSColor.labelColor setFill];
+        NSRectFillUsingOperation(iconRect, NSCompositingOperationSourceIn);
+        [NSGraphicsContext restoreGraphicsState];
+        if (tag != nil) {
+            NSDictionary *attributes = @{NSFontAttributeName: [NSFont monospacedSystemFontOfSize:7 weight:NSFontWeightSemibold],
+                NSForegroundColorAttributeName: NSColor.labelColor};
+            NSSize size = [tag sizeWithAttributes:attributes];
+            [tag drawAtPoint:NSMakePoint(14 + (18 - size.width) / 2, -1) withAttributes:attributes];
+        }
+        return YES;
+    }];
+    image.template = NO;
+    return image;
+}
+
+static const CGFloat stmLineNameWidth = 120;
+static const CGFloat stmLineColumnGap = 16;
+
+static NSAttributedString *stmLineTitle(NSString *name, NSString *rates, CGFloat width) {
+    NSFont *font = [NSFont menuFontOfSize:0];
+    NSFont *rateFont = [NSFont monospacedDigitSystemFontOfSize:font.pointSize weight:NSFontWeightRegular];
+    NSDictionary *nameAttributes = @{NSFontAttributeName: font};
+    CGFloat rateWidth = [rates sizeWithAttributes:@{NSFontAttributeName: rateFont}].width;
+    CGFloat available = MIN(stmLineNameWidth, MAX(0, width - rateWidth - stmLineColumnGap));
+    NSString *displayName = stmMenuText(name);
+    if ([displayName sizeWithAttributes:nameAttributes].width > available) {
+        while (displayName.length > 0 && [[displayName stringByAppendingString:@"…"] sizeWithAttributes:nameAttributes].width > available) {
+            NSRange last = [displayName rangeOfComposedCharacterSequenceAtIndex:displayName.length - 1];
+            displayName = [displayName substringToIndex:last.location];
+        }
+        displayName = [displayName stringByAppendingString:@"…"];
+    }
+    NSMutableParagraphStyle *style = [NSMutableParagraphStyle new];
+    style.tabStops = @[[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentRight location:width options:@{}]];
+    style.lineBreakMode = NSLineBreakByClipping;
+    NSMutableAttributedString *title = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@\t%@", displayName, rates]
+        attributes:@{NSFontAttributeName: font, NSParagraphStyleAttributeName: style}];
+    [title addAttribute:NSFontAttributeName value:rateFont range:NSMakeRange(displayName.length + 1, rates.length)];
+    return title;
+}
+
+static CGFloat stmLineTitleWidth(NSArray *lines) {
+    NSFont *font = [NSFont menuFontOfSize:0];
+    NSDictionary *rateAttributes = @{NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:font.pointSize weight:NSFontWeightRegular]};
+    CGFloat nameWidth = 0, rateWidth = 0;
+    for (NSDictionary *line in lines) {
+        nameWidth = MAX(nameWidth, MIN(stmLineNameWidth, [stmMenuText(line[@"name"]) sizeWithAttributes:@{NSFontAttributeName: font}].width));
+        rateWidth = MAX(rateWidth, [line[@"rateText"] sizeWithAttributes:rateAttributes].width);
+    }
+    return ceil(MAX(240, nameWidth + stmLineColumnGap + rateWidth));
+}
+
 static void stmUpdateDetailsView(NSView *view, NSArray<NSString *> *details) {
-    const CGFloat width = 300;
+    NSFont *keyFont = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
+    CGFloat keyWidth = 66;
+    for (NSString *detail in details) {
+        NSString *text = stmMenuText(detail);
+        NSRange separator = [text rangeOfString:@"\uff1a"];
+        if (separator.location == NSNotFound) separator = [text rangeOfString:@": "];
+        if (separator.location != NSNotFound) {
+            NSString *key = [text substringToIndex:separator.location];
+            keyWidth = MAX(keyWidth, ceil([key sizeWithAttributes:@{NSFontAttributeName: keyFont}].width) + 6);
+        }
+    }
+    const CGFloat width = MAX(300, keyWidth + 32 + 180);
     const CGFloat rowHeight = 22;
     const CGFloat padding = 10;
     CGFloat height = padding * 2 + rowHeight * details.count;
@@ -189,9 +281,9 @@ static void stmUpdateDetailsView(NSView *view, NSArray<NSString *> *details) {
         CGFloat y = height - padding - 17 - rowHeight * i;
         NSTextField *keyLabel = (NSTextField *)view.subviews[i * 2];
         keyLabel.stringValue = key;
-        CGFloat keyWidth = [text containsString:@"\uff1a"] ? 66 : 86;
         keyLabel.frame = NSMakeRect(14, y, keyWidth, 17);
-        keyLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
+        keyLabel.font = keyFont;
+        keyLabel.toolTip = key;
         NSTextField *valueLabel = (NSTextField *)view.subviews[i * 2 + 1];
         valueLabel.stringValue = value;
         valueLabel.frame = NSMakeRect(18 + keyWidth, y, width - 32 - keyWidth, 17);
@@ -281,36 +373,54 @@ static void stmUpdateLineActions(NSMenu *menu, NSDictionary *line, NSDictionary 
         NSMenuItem *toggle = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(setTunnel:) keyEquivalent:@""];
         toggle.target = menuTarget;
         [menu addItem:toggle];
+        NSMenuItem *connections = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(viewConnections:) keyEquivalent:@""];
+        connections.target = menuTarget;
+        [menu addItem:connections];
     }
     BOOL enabled = [line[@"enabled"] boolValue];
     BOOL busy = [line[@"busy"] boolValue];
     NSMenuItem *toggle = [menu itemAtIndex:2];
-    toggle.title = labels[busy ? @"working" : enabled ? @"stopTunnel" : @"startTunnel"];
+    NSString *actionLabel = labels[busy ? @"working" : enabled ? @"stopTunnel" : @"startTunnel"];
+    toggle.title = actionLabel;
+    toggle.toolTip = actionLabel;
+    toggle.accessibilityLabel = actionLabel;
     toggle.enabled = !busy;
     toggle.representedObject = @{@"name": line[@"name"], @"enabled": @(!enabled)};
     if (@available(macOS 11.0, *)) {
-        toggle.image = [NSImage imageWithSystemSymbolName:enabled ? @"stop.fill" : @"play.fill" accessibilityDescription:nil];
+        toggle.image = [NSImage imageWithSystemSymbolName:busy ? @"hourglass" : enabled ? @"stop.fill" : @"play.fill" accessibilityDescription:actionLabel];
+    }
+    NSMenuItem *connections = [menu itemAtIndex:3];
+    connections.title = labels[@"connections"];
+    connections.representedObject = @{@"name": line[@"name"], @"showHistory": @([line[@"showHistory"] boolValue])};
+    connections.enabled = YES;
+    if (@available(macOS 11.0, *)) {
+        connections.image = [NSImage imageWithSystemSymbolName:@"point.3.connected.trianglepath.dotted" accessibilityDescription:nil];
+        if (connections.image == nil) connections.image = [NSImage imageWithSystemSymbolName:@"list.bullet" accessibilityDescription:nil];
     }
     NSString *proxyURL = line[@"proxyURL"];
     BOOL hasProxy = [proxyURL isKindOfClass:NSString.class] && proxyURL.length > 0;
     if (!hasProxy) {
-        while (menu.numberOfItems > 3) [menu removeItemAtIndex:3];
+        while (menu.numberOfItems > 4) [menu removeItemAtIndex:4];
     } else {
-        if (menu.numberOfItems == 3) {
+        if (menu.numberOfItems == 4) {
             for (NSInteger i = 0; i < 2; i++) {
                 NSMenuItem *copy = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(copyProxy:) keyEquivalent:@""];
                 copy.target = menuTarget;
                 [menu addItem:copy];
             }
         }
-        NSMenuItem *copyURL = [menu itemAtIndex:3];
+        NSMenuItem *copyURL = [menu itemAtIndex:4];
         copyURL.title = labels[@"copyProxy"];
         copyURL.representedObject = proxyURL;
         copyURL.toolTip = proxyURL;
-        NSMenuItem *copyCommand = [menu itemAtIndex:4];
+        NSMenuItem *copyCommand = [menu itemAtIndex:5];
         copyCommand.title = labels[@"copyCommand"];
         copyCommand.representedObject = line[@"proxyCommand"];
         copyCommand.toolTip = line[@"proxyCommand"];
+        if (@available(macOS 11.0, *)) {
+            copyURL.image = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:nil];
+            copyCommand.image = [NSImage imageWithSystemSymbolName:@"terminal" accessibilityDescription:nil];
+        }
     }
 }
 
@@ -339,6 +449,7 @@ void stmTrayUpdate(const char *value) {
             statusItem.button.accessibilityLabel = statusItem.button.toolTip;
         }
         NSArray *lines = snapshot[@"lines"];
+        CGFloat titleWidth = stmLineTitleWidth(lines);
         emptyItem.hidden = lines.count != 0;
         NSMutableSet *names = [NSMutableSet new];
         for (NSDictionary *line in lines) [names addObject:line[@"name"]];
@@ -366,8 +477,10 @@ void stmTrayUpdate(const char *value) {
             }
             index++;
             item.title = line[@"title"];
-            item.image = stmStateImage(line[@"state"]);
-            item.toolTip = name;
+            item.attributedTitle = stmLineTitle(name, line[@"rateText"] ?: @"", titleWidth);
+            item.image = stmLineImage(line[@"state"], line[@"serviceIcon"]);
+            item.toolTip = [NSString stringWithFormat:@"%@ · %@", name, stmServiceName(line[@"serviceIcon"])];
+            item.accessibilityLabel = [item.toolTip stringByAppendingFormat:@" · %@", line[@"rateText"] ?: @""];
             NSArray<NSString *> *details = line[@"details"];
             NSMenuItem *detail = item.submenu.itemArray.firstObject;
             if (detail == nil) {

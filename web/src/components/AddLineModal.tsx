@@ -1,10 +1,12 @@
 import { useEffect, type ReactNode } from 'react'
 import { QuestionCircleOutlined, SafetyCertificateOutlined, SettingOutlined } from '@ant-design/icons'
-import { Alert, App as AntApp, Checkbox, Collapse, Form, Input, Modal, Segmented, Tooltip } from 'antd'
+import { Alert, App as AntApp, Checkbox, Collapse, Form, Input, Modal, Segmented, Select, Tooltip } from 'antd'
 import { api } from '../api'
 import type { Direction, TunnelRequest, TunnelView } from '../types'
 import { useI18n } from '../I18n'
 import type { Translate } from '../locale'
+import ServiceIcon from './ServiceIcon'
+import { resolveServiceIcon, serviceIcons, serviceNames } from '../serviceIcon'
 
 interface Props {
   open: boolean
@@ -14,6 +16,7 @@ interface Props {
 }
 
 interface FormValues {
+  service_icon?: string
   name: string
   direction: Direction
   local_listen?: string
@@ -61,6 +64,8 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
   const { message } = AntApp.useApp()
   const [form] = Form.useForm<FormValues>()
   const direction = Form.useWatch('direction', form) ?? 'local'
+  const target = Form.useWatch('forward_address', form) ?? ''
+  const detectedService = resolveServiceIcon('auto', direction, target)
   const skipHostKey = Form.useWatch('insecure_skip_host_key_check', form) ?? false
 
   useEffect(() => {
@@ -69,6 +74,7 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
     if (tunnel) {
       form.setFieldsValue({
         name: tunnel.Name,
+        service_icon: tunnel.service_icon || 'auto',
         direction: tunnel.direction,
         local_listen: tunnel.local_listen,
         ssh_address: tunnel.ssh_address,
@@ -93,6 +99,7 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
   async function handleFinish(values: FormValues) {
     const payload: TunnelRequest = {
       name: values.name,
+      service_icon: values.service_icon || 'auto',
       direction: values.direction,
       local_listen: showLocal ? values.local_listen : undefined,
       ssh_address: values.ssh_address,
@@ -136,7 +143,7 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
         form={form}
         layout="vertical"
         onFinish={handleFinish}
-        initialValues={{ direction: 'local', trust_new_host_key: false, insecure_skip_host_key_check: false }}
+        initialValues={{ direction: 'local', service_icon: 'auto', trust_new_host_key: false, insecure_skip_host_key_check: false }}
       >
         <div className="form-section">
           <Form.Item
@@ -150,6 +157,13 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
         <div className="form-section">
           <h3 className="form-section-heading">{tr("线路与端点")}</h3>
           <div className="form-grid">
+            <Form.Item name="service_icon" className="span-2"
+              label={<FieldLabel tip={tr('自动按目标服务端口识别，不使用监听端口或 SSH 跳板端口。非标准端口可手动选择；仅修改图标不会重启线路。')}>{tr('服务图标')}</FieldLabel>}>
+              <Select className="service-icon-select" options={[
+                { value: 'auto', label: <span className="service-icon-option"><ServiceIcon kind={detectedService} />{tr('自动识别：{service}', { service: serviceNames[detectedService] })}</span> },
+                ...serviceIcons.map(kind => ({ value: kind, label: <span className="service-icon-option"><ServiceIcon kind={kind} />{serviceNames[kind]}</span> })),
+              ]} />
+            </Form.Item>
             <Form.Item
               name="name"
               label={<FieldLabel tip={tr("线路的唯一标识，用于列表展示和 CLI 操作；创建后不可修改。")}>{tr("线路名称")}</FieldLabel>}

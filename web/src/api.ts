@@ -17,6 +17,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  autostart: (signal?: AbortSignal) => request<import('./types').AutostartStatus>('/api/desktop/autostart', { signal, cache: 'no-store' }),
+  setAutostart: (enabled: boolean, signal?: AbortSignal) => request<import('./types').AutostartStatus>('/api/desktop/autostart', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }), signal,
+  }),
   logs: (query: URLSearchParams, signal?: AbortSignal) => request<RuntimeLogs>(`/api/logs?${query}`, { signal, cache: 'no-store' }),
 
   allConnections: (query: URLSearchParams, signal?: AbortSignal) => request<ConnectionsView>(`/api/connections?${query}`, { signal, cache: 'no-store' }),
