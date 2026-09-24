@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const desktop = path.join(root, 'desktop')
+const config = JSON.parse(fs.readFileSync(path.join(desktop, 'wails.json'), 'utf8'))
+const executableName = config.outputfilename
+if (!/^[a-zA-Z0-9_-]+$/.test(executableName)) throw new Error('Invalid desktop executable name')
 const output = path.join(root, 'dist', 'desktop')
 const flags = new Set(process.argv.slice(2))
 for (const flag of flags) {
@@ -55,9 +58,8 @@ if (system === 'linux') args.push('-tags', 'webkit2_41')
 if (system === 'windows') args.push('-webview2', 'embed')
 if (flags.has('--installer')) args.push('-nsis', '-installscope', 'user')
 const bin = path.join(desktop, 'build', 'bin')
-const stem = `ssh-tunnel-manager-${system}-${targetArch}`
+const stem = `${executableName}-${system}-${targetArch}`
 if (system === 'darwin') {
-  const config = JSON.parse(fs.readFileSync(path.join(desktop, 'wails.json'), 'utf8'))
   const bundleName = `${config.info.productName}.app`
   const app = path.join(bin, bundleName)
   const macos = path.join(app, 'Contents/MacOS')
@@ -71,15 +73,17 @@ if (system === 'darwin') {
       run('go', ['build', '-buildvcs=false', '-tags', 'production', '-ldflags', '-s -w', '-o', path.join(stage, architecture), '.'], desktop,
         { ...environment, CGO_ENABLED: '1', GOOS: 'darwin', GOARCH: architecture })
     }
-    const executable = path.join(macos, 'ssh-tunnel-manager')
+    const executable = path.join(macos, executableName)
     if (architectures.length === 2) run('lipo', ['-create', ...architectures.map((name) => path.join(stage, name)), '-output', executable])
     else fs.copyFileSync(path.join(stage, arch), executable)
     fs.chmodSync(executable, 0o755)
+    // Remove only the obsolete generated executable, not app data or old packages.
+    if (executableName !== 'ssh-tunnel-manager') fs.rmSync(path.join(macos, 'ssh-tunnel-manager'), { force: true })
   } finally { fs.rmSync(stage, { recursive: true, force: true }) }
   const xml = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
   const plist = fs.readFileSync(path.join(desktop, 'build/darwin/Info.plist'), 'utf8')
     .replaceAll('{{.Info.ProductName}}', xml(config.info.productName))
-    .replaceAll('{{.OutputFilename}}', 'ssh-tunnel-manager')
+    .replaceAll('{{.OutputFilename}}', xml(executableName))
     .replaceAll('{{.Info.ProductVersion}}', xml(config.info.productVersion))
     .replaceAll('{{.Info.Copyright}}', xml(config.info.copyright))
   fs.writeFileSync(path.join(app, 'Contents/Info.plist'), plist)
@@ -104,9 +108,9 @@ if (system === 'darwin') {
   console.log(`Application: ${app}`)
 } else if (system === 'windows') {
   run(wailsCommand(), args, desktop)
-  fs.copyFileSync(path.join(bin, 'ssh-tunnel-manager.exe'), path.join(output, `${stem}.exe`))
+  fs.copyFileSync(path.join(bin, `${executableName}.exe`), path.join(output, `${stem}.exe`))
   if (flags.has('--installer')) {
-    const installers = fs.readdirSync(bin).filter((name) => name.endsWith('-installer.exe'))
+    const installers = fs.readdirSync(bin).filter((name) => name.startsWith(`${executableName}-`) && name.endsWith('-installer.exe'))
     if (installers.length !== 1) throw new Error(`Expected one NSIS installer, found ${installers.length}`)
     fs.copyFileSync(path.join(bin, installers[0]), path.join(output, `${stem}-installer.exe`))
   }
@@ -114,20 +118,20 @@ if (system === 'darwin') {
   run(wailsCommand(), args, desktop)
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'ssh-tunnel-linux-'))
   try {
-    const executable = path.join(stage, 'usr/bin/ssh-tunnel-manager')
+    const executable = path.join(stage, 'usr/bin', executableName)
     fs.mkdirSync(path.dirname(executable), { recursive: true })
-    fs.copyFileSync(path.join(bin, 'ssh-tunnel-manager'), executable)
+    fs.copyFileSync(path.join(bin, executableName), executable)
     fs.chmodSync(executable, 0o755)
     const applications = path.join(stage, 'usr/share/applications')
     const icons = path.join(stage, 'usr/share/icons/hicolor/1024x1024/apps')
     fs.mkdirSync(applications, { recursive: true })
     fs.mkdirSync(icons, { recursive: true })
     fs.copyFileSync(path.join(desktop, 'build/appicon.png'), path.join(icons, 'ssh-tunnel-manager.png'))
-    fs.writeFileSync(path.join(applications, 'ssh-tunnel-manager.desktop'), '[Desktop Entry]\nType=Application\nName=SSH Tunnel Manager\nExec=ssh-tunnel-manager\nIcon=ssh-tunnel-manager\nTerminal=false\nCategories=Network;\nStartupWMClass=ssh-tunnel-manager\n')
+    // Keep the desktop-file, icon and package IDs stable for existing installations.
+    fs.writeFileSync(path.join(applications, 'ssh-tunnel-manager.desktop'), `[Desktop Entry]\nType=Application\nName=Portway\nExec=${executableName}\nIcon=ssh-tunnel-manager\nTerminal=false\nCategories=Network;\nStartupWMClass=${executableName}\n`)
     run('tar', ['-czf', path.join(output, `${stem}.tar.gz`), '-C', stage, 'usr'])
     if (spawnSync('dpkg-deb', ['--version'], { stdio: 'ignore' }).status === 0) {
       fs.mkdirSync(path.join(stage, 'DEBIAN'))
-      const config = JSON.parse(fs.readFileSync(path.join(desktop, 'wails.json'), 'utf8'))
       fs.writeFileSync(path.join(stage, 'DEBIAN/control'), `Package: ssh-tunnel-manager\nVersion: ${config.info.productVersion}\nArchitecture: ${arch}\nMaintainer: SSH Tunnel Manager\nDepends: libgtk-3-0 | libgtk-3-0t64, libwebkit2gtk-4.1-0\nSection: net\nPriority: optional\nDescription: Desktop SSH forwarding manager\n`)
       run('dpkg-deb', ['--build', '--root-owner-group', stage, path.join(output, `${stem}.deb`)])
     } else { console.log('dpkg-deb not found; created tar.gz only') }

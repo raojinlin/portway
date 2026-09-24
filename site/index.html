@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f5f7">
+  <meta name="description" content="Portway 是一款 SSH 隧道管理工具。管理本地转发、远程转发与 SOCKS5 代理，复用 SSH config，在菜单栏查看连接与流量。支持 macOS、Windows 和 Linux。">
+  <meta property="og:title" content="Portway — SSH 隧道，留在手边。">
+  <meta property="og:description" content="连接数据库、调试远端服务、临时走个代理。把每天用到的 SSH 隧道，收进一个安静的桌面工具。">
+  <meta property="og:type" content="website">
+  <title>Portway — SSH 隧道，留在手边。</title>
+  <link rel="icon" href="./mark.svg" type="image/svg+xml">
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="site-header wrap">
+    <a class="brand" href="#" aria-label="Portway 首页"><img src="./mark.svg" width="30" height="30" alt="">Portway<span class="brand-dot">.</span></a>
+    <nav aria-label="主导航">
+      <a href="#workflow">怎么用</a>
+      <a href="#details">细节</a>
+      <a class="nav-source" href="https://github.com/raojinlin/portway">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+    <label class="theme-control"><span class="sr-only">页面主题</span><select id="theme-select" aria-label="页面主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+    <a class="nav-download" href="#download">获取 Portway <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="tiny-line"></span> 一个顺手的 SSH 隧道工具</p>
+        <h1 id="hero-title">SSH 隧道，<br>留在<span class="title-emphasis">手边。</span></h1>
+        <p class="hero-description">数据库在内网，服务在远端。<br>把常用的连接存下来，需要时点一下。<br>不用再找那条 <code>ssh -L</code> 命令。</p>
+        <div class="hero-actions"><a class="button primary" href="#download">获取 Portway <span aria-hidden="true">↗</span></a><a class="text-link" href="#workflow">看看它怎么工作 <span aria-hidden="true">↓</span></a></div>
+        <p class="platform-note">macOS <span>/</span> Windows <span>/</span> Linux</p>
+      </div>
+
+      <div class="hero-stage">
+        <div class="stage-label"><span>YOUR CONNECTIONS, WITHIN REACH.</span><span>01 — 03</span></div>
+        <div class="app-window" aria-label="线路管理交互演示，所有数据均为示例">
+          <div class="window-chrome"><div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div><span>Portway</span><span class="window-mark" aria-hidden="true">⌘</span></div>
+          <div class="demo-content">
+            <div class="demo-heading"><strong>线路</strong><span><i class="status-dot"></i> <b id="running-count">3</b> 条运行中</span></div>
+            <div class="demo-line">
+              <div class="demo-line-top"><span class="service-icon postgres">PG</span><strong>work-database</strong><span class="type-label">本地转发</span><i class="status-dot" aria-label="运行中"></i></div>
+              <div class="demo-route"><code>127.0.0.1:15432</code><span>→</span><span>jump</span><span>→</span><code>db:5432</code></div>
+              <div class="demo-line-bottom"><span>接收 <b>24.8 MB</b><span class="stat-gap">发送 <b>1.2 MB</b></span></span><button class="connection-button" data-open-connections>4 个连接 <span aria-hidden="true">↗</span></button></div>
+            </div>
+            <div class="demo-line">
+              <div class="demo-line-top"><span class="service-icon web">↗</span><strong>dev-preview</strong><span class="type-label">远程转发</span><i class="status-dot" aria-label="运行中"></i></div>
+              <div class="demo-route"><code>127.0.0.1:9000</code><span>→</span><span>dev-box</span><span>→</span><code>localhost:3000</code></div>
+              <div class="demo-line-bottom"><span>接收 <b>8.6 MB</b><span class="stat-gap">发送 <b>320 KB</b></span></span><span>2 个连接</span></div>
+            </div>
+            <div class="demo-line proxy-line" id="proxy-line">
+              <div class="demo-line-top"><span class="service-icon proxy">S5</span><strong>daily-proxy</strong><span class="type-label">SOCKS5</span><i class="status-dot" id="proxy-dot" aria-label="运行中"></i></div>
+              <div class="demo-route"><code>127.0.0.1:1080</code><span>→</span><span>gateway</span><span>→</span><span>由客户端指定</span></div>
+              <div class="demo-line-bottom"><span id="proxy-status">运行中</span><button id="proxy-toggle" class="proxy-toggle" aria-pressed="false"><span aria-hidden="true">■</span> 停止线路</button></div>
+            </div>
+            <div class="demo-footer"><span><i class="mini-lock" aria-hidden="true"></i> SSH 加密连接</span><span>配置保存在本机</span></div>
+          </div>
+        </div>
+        <div class="preview-caption"><span><span class="caption-star" aria-hidden="true">✳</span> 试试停止线路，或点开连接数。</span><span>交互预览 · 示例数据</span></div>
+      </div>
+    </section>
+
+    <div class="capability-strip wrap" aria-label="基础能力"><p>你的 SSH 配置，<br><strong>不用从头再来。</strong></p><span><i aria-hidden="true">✓</i> ~/.ssh/config</span><span><i aria-hidden="true">✓</i> ProxyJump 多级跳板</span><span><i aria-hidden="true">✓</i> 原生 SSH 连接</span><span><i aria-hidden="true">✓</i> 断线自动重连</span></div>
+
+    <section class="workflow wrap section-space" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-heading"><p class="eyebrow">01 / 连到你需要的地方</p><h2 id="workflow-title">三种转发。<br>都是熟悉的工作。</h2><p>不用记住参数顺序。<br>选好方向，填好地址，其余交给 Portway。</p></div>
+      <div class="workflow-interactive">
+        <div class="mode-tabs" role="tablist" aria-label="转发方式">
+          <button id="tab-local" role="tab" aria-controls="mode-panel" aria-selected="true" data-mode="local">本地转发 <code>-L</code></button>
+          <button id="tab-remote" role="tab" aria-controls="mode-panel" aria-selected="false" tabindex="-1" data-mode="remote">远程转发 <code>-R</code></button>
+          <button id="tab-socks" role="tab" aria-controls="mode-panel" aria-selected="false" tabindex="-1" data-mode="socks">SOCKS5 <code>-D</code></button>
+        </div>
+        <div id="mode-panel" class="mode-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-local">
+          <div class="panel-kicker"><span id="mode-kicker">LOCAL FORWARDING</span><span class="panel-number" id="mode-number">01</span></div>
+          <h3 id="mode-title">在本机，访问内网数据库。</h3>
+          <p id="mode-description">数据库不必开放公网端口。让本机的数据库客户端，经由 SSH 跳板连接远端服务。</p>
+          <div class="route-diagram" aria-label="连接路径">
+            <div><span class="node-symbol" aria-hidden="true">▤</span><strong id="route-from">你的电脑</strong><code id="route-from-address">127.0.0.1:15432</code></div>
+            <span class="route-wire" aria-hidden="true"><i></i></span>
+            <div><span class="node-symbol gateway-symbol" aria-hidden="true">⇄</span><strong>SSH 服务器</strong><code id="route-gateway">jump</code></div>
+            <span class="route-wire" aria-hidden="true"><i></i></span>
+            <div><span class="node-symbol" aria-hidden="true">▥</span><strong id="route-to">内网数据库</strong><code id="route-to-address">db:5432</code></div>
+          </div>
+          <div class="terminal-line"><span aria-hidden="true">$</span><code id="mode-command">ssh -L 15432:db:5432 jump</code></div>
+          <p class="panel-note" id="mode-note">相同的转发意图，不必每次重新输入。示例地址仅用于说明。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="menubar-section wrap" aria-labelledby="menubar-title">
+      <div class="menubar-stage" aria-label="macOS 菜单栏网页演示，示例数据">
+        <div class="menubar-strip"><span>macOS <span class="menubar-strip-label">菜单栏</span></span><button id="menubar-trigger" class="menubar-trigger" aria-label="展开或收起 Portway 菜单栏演示，上行 12.4 KB/s，下行 286 KB/s" aria-expanded="true" aria-controls="menubar-panel"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16l-4-4m4 4-4 4M20 17H4l4-4m-4 4 4 4"/></svg><span class="menubar-speeds"><span>12.4 KB/s</span><span>286 KB/s</span></span></button><span class="menubar-clock" aria-hidden="true">09:41</span></div>
+        <div class="menubar-panel" id="menubar-panel">
+          <a class="menubar-link" href="#hero-title"><span aria-hidden="true">▣</span> 打开 Portway <span class="menubar-hint">主窗口演示 ↗</span></a>
+          <div class="menubar-lines">
+            <details class="menubar-tunnel"><summary><i class="status-dot"></i><span class="service-icon postgres">PG</span><span class="menubar-name">work-database</span><span class="menubar-rate">42 KB/s</span><span class="menubar-chevron" aria-hidden="true">›</span></summary><div class="menubar-submenu"><p>本地转发 <code>127.0.0.1:15432 → db:5432</code></p><button data-open-connections><span aria-hidden="true">⌕</span> 查看连接 <span class="menubar-hint">4 个</span></button></div></details>
+            <details class="menubar-tunnel" open><summary><i class="status-dot" id="menubar-proxy-dot" aria-label="运行中"></i><span class="service-icon proxy">S5</span><span class="menubar-name">daily-proxy</span><span class="menubar-rate" id="menubar-proxy-rate">244 KB/s</span><span class="menubar-chevron" aria-hidden="true">›</span></summary><div class="menubar-submenu"><p>SOCKS5 <code>127.0.0.1:1080 → gateway</code></p><button id="menubar-proxy-toggle"><span aria-hidden="true">■</span> 停止线路</button><button id="menubar-copy-proxy"><span aria-hidden="true">⧉</span> 复制代理命令</button></div></details>
+          </div>
+          <p class="menubar-feedback" id="menubar-feedback" role="status"></p>
+          <span class="menubar-demo-label">交互演示 · 不操作系统菜单或真实线路</span>
+        </div>
+      </div>
+      <div class="menubar-explainer"><p class="eyebrow">macOS / 菜单栏</p><h2 id="menubar-title">抬眼看流量，<br>顺手管连接。</h2><p>图标旁两行速率，上面上传，下面下载。显示的是 Portway 隧道的业务流量，不是整台电脑的网速。</p><ol><li><strong>点一下图标</strong><span>展开线路状态、服务图标和右对齐的速率。</span></li><li><strong>展开一条线路</strong><span>试试停止 daily-proxy；停止后，复制代理入口也会隐藏。</span></li><li><strong>需要细看时</strong><span>展开 work-database，点“查看连接”，打开连接详情示例。</span></li></ol><p class="menubar-platform-note">这里演示 macOS 菜单栏。Windows 提供托盘入口；Linux 暂无托盘。外观会随本页明暗主题切换。</p></div>
+    </section>
+
+    <section class="details-section" id="details" aria-labelledby="details-title">
+      <div class="wrap details-inner">
+        <div class="details-heading"><p class="eyebrow">02 / 连上以后，也照顾到</p><h2 id="details-title">少开一个窗口。<br>少猜一次原因。</h2><p>连接不该成为工作的主角。<br>平时收在菜单栏，需要时再展开。</p><a class="text-link" href="https://github.com/raojinlin/portway/blob/main/desktop/README.md">阅读桌面版指南 <span aria-hidden="true">↗</span></a></div>
+        <div class="detail-list">
+          <article><span class="detail-index">01</span><div><h3>关掉窗口，线路还在。</h3><p>macOS 菜单栏、Windows 托盘随时查看状态，直接启停线路。开启登录自启，常用的连接也一起回来。</p><span class="detail-footnote">Linux 关闭窗口会退出应用。</span></div><span class="detail-symbol" aria-hidden="true">↗</span></article>
+          <article><span class="detail-index">02</span><div><h3>谁在连接，流量去了哪里。</h3><p>点开连接数，看来源、目标、持续时间和流量。出了问题，去日志里找；SOCKS5 请求历史会保存到本机文件。</p><button class="text-link inline-link" data-open-connections>看看连接详情 <span aria-hidden="true">↗</span></button></div><span class="detail-symbol" aria-hidden="true">⌕</span></article>
+          <article><span class="detail-index">03</span><div><h3>代理命令，复制就好。</h3><p>支持 Bash、Zsh 和 PowerShell。给当前终端设置 SOCKS5 代理，不改系统代理，也不用手动拼环境变量。</p><button class="copy-button" id="copy-proxy"><span aria-hidden="true">⧉</span> 复制 Bash / Zsh 示例</button><span class="copy-feedback" id="copy-feedback" role="status"></span></div><span class="detail-symbol" aria-hidden="true">⌘</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="ground-rules wrap section-space" aria-labelledby="rules-title">
+      <div><p class="eyebrow">03 / 简单，也有边界</p><h2 id="rules-title">连接你的服务器。<br>配置留在你的机器。</h2></div>
+      <div class="rules-copy"><p>复用已有的 SSH Host、私钥和跳板配置。普通 SSH 与 ProxyJump 由 Go 原生实现，不需要额外安装系统 <code>ssh</code> 命令。</p><p>默认严格校验服务器主机密钥。配置和日志保存在本机，不需要注册 Portway 账户。</p><a class="text-link" href="https://github.com/raojinlin/portway#ssh-认证与安全">认证方式与安全说明 <span aria-hidden="true">↗</span></a></div>
+    </section>
+
+    <section class="download-section wrap" id="download" aria-labelledby="download-title">
+      <div class="download-copy"><p class="eyebrow">准备好，就连上。</p><h2 id="download-title">给常用的连接，<br>一个固定的位置。</h2><p>桌面应用，或者一个内嵌 Web 界面的 daemon。<br>选适合你工作方式的那个。</p><a class="text-link" href="https://github.com/raojinlin/portway#快速开始">更喜欢命令行？从这里开始 <span aria-hidden="true">↗</span></a></div>
+      <div class="download-panel">
+        <div class="os-selector" role="group" aria-label="选择操作系统"><button data-os="mac" aria-pressed="true">macOS</button><button data-os="windows" aria-pressed="false">Windows</button><button data-os="linux" aria-pressed="false">Linux</button></div>
+        <div class="download-info" aria-live="polite"><span class="download-platform" id="os-title">macOS</span><span id="os-support">12+ · Apple Silicon 与 Intel</span><p id="os-description">打开 DMG 或解压 ZIP，将 Portway.app 拖入“应用程序”，再从那里打开。</p></div>
+        <a class="button primary download-button" href="https://github.com/raojinlin/portway/actions/workflows/desktop.yml">前往 GitHub 获取构建包 <span aria-hidden="true">↗</span></a>
+        <p class="download-help">选择成功的构建，在 Artifacts 中找到 <code id="artifact-name">portway-macos-universal</code>。下载需要登录 GitHub。</p>
+        <p class="signing-note" id="os-warning">当前 macOS 包尚未公证，系统可能提示来源未知。请确认下载来源可信。</p>
+      </div>
+    </section>
+
+    <section class="faq wrap" aria-labelledby="faq-title">
+      <h2 id="faq-title">还有几个小问题。</h2>
+      <div class="faq-list">
+        <details><summary>需要先装 Go、Node.js 或 SSH 吗？<span aria-hidden="true">+</span></summary><p>使用构建好的桌面应用不需要 Go 或 Node.js，普通 SSH 和 ProxyJump 也不依赖系统 ssh。自定义 ProxyCommand 可能仍需外部程序。Windows 需要 WebView2，Linux 需要 GTK3 和 WebKitGTK 4.1。</p></details>
+        <details><summary>可以直接使用已有的 SSH config 吗？<span aria-hidden="true">+</span></summary><p>可以。在线路的 SSH 服务中填写 Host 别名，Portway 会读取 ~/.ssh/config，支持 IdentityFile、ProxyJump 和多级跳板。并非所有 OpenSSH 扩展都受支持，具体范围请查看项目文档。</p></details>
+        <details><summary>没有桌面环境，也能用吗？<span aria-hidden="true">+</span></summary><p>可以使用 daemon，通过内嵌 Web 页面或 CLI 管理。Web / HTTP API 没有登录认证，默认只监听 127.0.0.1，请勿直接暴露到公网。CLI 不能控制桌面应用里的线路。</p></details>
+        <details><summary>SOCKS5 会改变整个系统的代理吗？<span aria-hidden="true">+</span></summary><p>不会。复制的命令只影响当前终端内支持代理环境变量与 SOCKS5 的程序。当前支持 TCP CONNECT，不支持 UDP，也没有 SOCKS5 用户名密码认证，建议只监听回环地址。</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap"><a class="brand" href="#"><img src="./mark.svg" width="26" height="26" alt="">Portway<span class="brand-dot">.</span></a><p>把连接留在手边，把注意力留给工作。</p><div><a href="https://github.com/raojinlin/portway">源码</a><a href="https://github.com/raojinlin/portway/issues">反馈问题 <span aria-hidden="true">↗</span></a></div></footer>
+
+  <dialog id="connections-dialog" aria-labelledby="connections-title">
+    <div class="dialog-heading"><div><p class="eyebrow">WORK-DATABASE / 示例数据</p><h2 id="connections-title">当前连接</h2></div><button id="close-dialog" aria-label="关闭连接详情">×</button></div>
+    <p>4 个连接，通过 jump 访问 db:5432。这里只展示交互，不会建立真实 SSH 连接。</p>
+    <div class="table-scroll"><table><thead><tr><th scope="col">来源地址</th><th scope="col">目标地址</th><th scope="col">持续时间</th><th scope="col">接收</th></tr></thead><tbody><tr><td>127.0.0.1:51824</td><td>db:5432</td><td>12m 08s</td><td>18.2 MB</td></tr><tr><td>127.0.0.1:51826</td><td>db:5432</td><td>08m 32s</td><td>4.1 MB</td></tr><tr><td>127.0.0.1:51830</td><td>db:5432</td><td>02m 17s</td><td>1.8 MB</td></tr><tr><td>127.0.0.1:51842</td><td>db:5432</td><td>00m 46s</td><td>0.7 MB</td></tr></tbody></table></div>
+  </dialog>
+</body>
+</html>

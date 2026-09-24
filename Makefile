@@ -1,4 +1,4 @@
-.PHONY: web build desktop desktop-tools desktop-universal desktop-dmg test run
+.PHONY: web build desktop desktop-tools desktop-universal desktop-dmg test run site
 
 BINARY ?= portway
 
@@ -28,3 +28,7 @@ test:
 
 run: web
 	go run ./cmd/tunnel daemon
+
+# Standalone marketing page; does not start the daemon or desktop app.
+site:
+	node scripts/site.mjs

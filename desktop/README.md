@@ -17,10 +17,10 @@
 Ubuntu 安装示例：
 
 ```bash
-sudo apt install ./ssh-tunnel-manager-linux-amd64.deb
+sudo apt install ./portway-linux-amd64.deb
 ```
 
-tar.gz 解压后可运行 `usr/bin/ssh-tunnel-manager`，但需自行安装运行依赖。当前 Linux 构建以 Ubuntu 24.04 为目标，不保证兼容所有发行版。
+tar.gz 解压后可运行 `usr/bin/portway`，但需自行安装运行依赖。当前 Linux 构建以 Ubuntu 24.04 为目标，不保证兼容所有发行版。
 
 本地与 CI 构建尚未提供公开分发签名：macOS 使用 ad-hoc 签名，未做 Developer ID 公证；Windows 未做 Authenticode 签名。系统可能显示来源或信誉警告，请先确认文件来源可信。
 
@@ -162,10 +162,12 @@ Windows 前端构建完成后，使用 `node scripts/desktop.mjs --installer` �
 | 平台 | 应用 | 分发格式 |
 | --- | --- | --- |
 | macOS | `Portway.app` | `.zip`，可选 `.dmg` |
-| Windows | `ssh-tunnel-manager.exe` | 独立 `.exe`，可选 `-installer.exe` |
-| Linux | `ssh-tunnel-manager` | `.tar.gz`；有 `dpkg-deb` 时同时生成 `.deb` |
+| Windows | `portway.exe` | 独立 `.exe`，可选 `-installer.exe` |
+| Linux | `portway` | `.tar.gz`；有 `dpkg-deb` 时同时生成 `.deb` |
 
-包名使用 `ssh-tunnel-manager-<系统>-<架构>` 前缀，macOS 通用包架构为 `universal`。公开分发前仍需单独完成签名、公证等发布步骤。
+包名使用 `portway-<系统>-<架构>` 前缀，macOS 通用包架构为 `universal`；应用内部执行文件为 `Portway.app/Contents/MacOS/portway`。公开分发前仍需单独完成签名、公证等发布步骤。
+
+配置目录、macOS bundle ID、Linux 软件包 ID 和桌面入口 ID 保留原值，避免已有安装和配置失联。Windows / Linux 旧版自启路径含旧文件名，更新后请在应用配置中点击“更新启动项”。旧分发包不会自动删除，请使用新前缀产物。桌面版和 CLI 均名为 `portway`，请按使用方式选择，不要覆盖安装到同一个路径。
 
 ### 测试
 
@@ -173,6 +175,7 @@ Windows 前端构建完成后，使用 `node scripts/desktop.mjs --installer` �
 
 ```bash
 npm --prefix web test
+node --test scripts/tests/*.test.mjs
 go test ./...
 cd desktop
 go test -tags production,webkit2_41 ./...

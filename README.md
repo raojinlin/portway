@@ -4,6 +4,8 @@
 
 桌面版支持 macOS、Windows 和 Linux；也可以只运行一个内嵌 Web 界面的 daemon，通过浏览器或 CLI 管理。普通 SSH 连接和 `ProxyJump` 由 Go 原生实现，不需要安装系统 `ssh` 命令。
 
+产品落地页位于 [`site/`](site/README.md)，可通过 `make site` 在本机预览；与应用管理界面独立，无需启动 daemon。
+
 ## 选择使用方式
 
 | 方式 | 适合场景 | 如何管理 |
