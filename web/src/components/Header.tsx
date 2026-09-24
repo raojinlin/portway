@@ -25,7 +25,7 @@ export default function Header({ tunnels, onAddClick, onConfigClick }: Props) {
         <div className="header-actions">
           <Dropdown trigger={['click']} menu={{
             selectable: true, selectedKeys: [languagePreference],
-            items: [{ key: 'system', label: tr('自动检测语言') }, { key: 'zh', label: tr("简体中文") }, { key: 'en', label: 'English' }],
+            items: [{ key: 'system', label: tr('自动检测') }, { key: 'zh', label: tr("简体中文") }, { key: 'en', label: 'English' }],
             onClick: ({ key }) => { if (key === 'system' || key === 'zh' || key === 'en') setLanguagePreference(key) },
           }}>
             <Button type="text" icon={<GlobalOutlined />} title={tr('切换语言')} aria-label={tr('切换语言')} />

@@ -192,7 +192,7 @@
   "跟随系统": "System",
   "深色": "Dark",
   "浅色": "Light",
-  "自动检测语言": "Auto-detect language",
+  "自动检测": "Auto-detect",
   "简体中文": "简体中文",
   "切换语言": "Language",
   "daemon 配置与日志设置，保存到 YAML 文件": "Daemon and log settings, saved to YAML",
