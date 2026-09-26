@@ -9,6 +9,8 @@ type TrayActions struct {
 	Quit        func()
 	Directory   func()
 	Logs        func()
+	MCP         func()
+	SetMCP      func(bool)
 	Copy        func(string)
 	SetEnabled  func(string, bool)
 	Connections func(string, bool)
@@ -25,12 +27,20 @@ type TraySnapshot struct {
 	Summary    string            `json:"summary"`
 	Traffic    string            `json:"traffic"`
 	StatusText string            `json:"statusText"`
+	MCP        TrayMCP           `json:"mcp"`
 	Lines      []TrayLine        `json:"lines"`
+}
+
+type TrayMCP struct {
+	Running bool   `json:"running"`
+	State   string `json:"state"`
+	Status  string `json:"status"`
+	Detail  string `json:"detail"`
 }
 
 func MenuLabels(language, title string) map[string]string {
 	if language == "en" {
-		return map[string]string{"open": "Open " + title, "directory": "Open Configuration Folder", "quit": "Quit " + title,
+		return map[string]string{"open": "Open " + title, "directory": "Open Configuration Folder", "quit": "Quit " + title, "mcp": "MCP", "openMCP": "Open MCP Settings", "startMCP": "Start MCP", "stopMCP": "Stop MCP",
 			"logs": "Open Logs", "copyProxy": "Copy Proxy URL", "copyCommand": "Copy Proxy Command",
 			"startTunnel": "Start Tunnel", "stopTunnel": "Stop Tunnel", "working": "Working...",
 			"connections": "View Connections",
@@ -42,7 +52,7 @@ func MenuLabels(language, title string) map[string]string {
 			"aboutDescription": "SSH tunnel manager for local, remote and SOCKS5 forwarding.",
 			"empty":            "No tunnels", "removed": "Removed", "upload": "Upload", "download": "Download"}
 	}
-	return map[string]string{"open": "打开 " + title, "directory": "打开配置目录", "quit": "退出 " + title,
+	return map[string]string{"open": "打开 " + title, "directory": "打开配置目录", "quit": "退出 " + title, "mcp": "MCP", "openMCP": "打开 MCP 设置", "startMCP": "启动 MCP", "stopMCP": "停止 MCP",
 		"logs": "打开日志", "copyProxy": "复制代理地址", "copyCommand": "复制代理命令",
 		"startTunnel": "启动线路", "stopTunnel": "停止线路", "working": "处理中…",
 		"connections": "查看连接",

@@ -8,8 +8,8 @@ const compiled = ts.transpileModule(readFileSync(new URL('../src/desktopNavigati
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText
 
-test('native log navigation subscribes before ready, acknowledges and cleans up', () => {
-  let listener, opened = 0
+test('native log and MCP navigation subscribe before ready, acknowledge and clean up', () => {
+  let listener, opened = 0, mcpOpened = 0
   const emitted = []
   const runtime = {
     EventsOn(name, callback) {
@@ -24,9 +24,12 @@ test('native log navigation subscribes before ready, acknowledges and cleans up'
   }
   const api = {}
   runInNewContext(compiled, { exports: api, window: { runtime } })
-  const stop = api.listenForDesktopNavigation(() => opened++)
+  const stop = api.listenForDesktopNavigation(() => opened++, undefined, () => mcpOpened++)
   assert.equal(opened, 1)
   assert.deepEqual(emitted[1], ['desktop:navigation-applied', 'activity'])
+  listener('mcp')
+  assert.equal(mcpOpened, 1)
+  assert.deepEqual(emitted.at(-1), ['desktop:navigation-applied', 'mcp'])
   listener('unknown')
   assert.equal(opened, 1)
   listener('activity')

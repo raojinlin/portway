@@ -83,6 +83,43 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 	return result
 }
 
+func trayMCPStatus(status daemon.MCPStatus, language string) platform.TrayMCP {
+	state := "stopped"
+	label := trayText(language, "未启用", "Disabled")
+	if status.Running {
+		state = "running"
+		label = trayText(language, "运行中", "Running")
+	} else if status.Error != "" {
+		state = "error"
+		label = trayText(language, "启动失败", "Failed to start")
+	}
+	auth := map[string]string{"token": "Token", "oauth": "OAuth 2.1", "both": "Token + OAuth 2.1"}[status.Auth]
+	access := map[string]string{
+		"read":    trayText(language, "只读", "Read only"),
+		"operate": trayText(language, "查看与启停", "Inspect and operate"),
+		"manage":  trayText(language, "完整管理", "Full management"),
+	}[status.Access]
+	details := make([]string, 0, 3)
+	if status.Addr != "" {
+		details = append(details, status.Addr)
+	}
+	if auth != "" {
+		details = append(details, auth)
+	}
+	if access != "" {
+		details = append(details, access)
+	}
+	if status.Error != "" {
+		details = append(details, trayShort(status.Error, 80))
+	}
+	detail := strings.Join(details, " · ")
+	display := "MCP: " + label
+	if language != "en" {
+		display = "MCP：" + label
+	}
+	return platform.TrayMCP{Running: status.Running, State: state, Status: display, Detail: detail}
+}
+
 func trayText(language, zh, en string) string {
 	if language == "en" {
 		return en

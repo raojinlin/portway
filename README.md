@@ -23,6 +23,7 @@
 - **日志与历史**：筛选运行日志和当前连接，查看落盘保存的 SOCKS5 历史请求及失败原因。
 - **代理快捷操作**：复制 SOCKS5 地址或 Bash/Zsh、PowerShell 代理命令。
 - **桌面常驻**：macOS 菜单栏、Windows 托盘展示线路状态与流量，可直接启停线路；macOS 图标旁显示上传 / 下载速率。
+- **MCP 与 Agent**：可选的本机 MCP 服务允许 Agent 查看、启停或完整管理线路，并内置可下载、可由 Agent 安装的 Portway Skill。
 - **界面偏好**：中英文切换，自动检测语言，浅色 / 深色 / 跟随系统主题。
 
 ## 快速开始
@@ -66,6 +67,38 @@ go build -o portway ./cmd/tunnel
 ```
 
 `stop` 保留配置，`rm` 删除线路。CLI 默认连接 `127.0.0.1:7777`；连接其他 daemon 时使用 `--addr`，或设置 `TUNNEL_DAEMON_ADDR`。例如 `./portway status --addr 127.0.0.1:8888 web`。查看完整参数可运行 `./portway add --help`。
+
+### MCP 与内置 Skill
+
+点击页面右上角、系统配置左侧的“MCP”按钮开启 MCP 服务器；保存后立即生效，无需重启 daemon 或桌面应用。MCP 使用独立的 Streamable HTTP 端点，默认是 `http://127.0.0.1:7778/mcp`，仅允许数字形式的本机回环地址。认证可使用静态 Bearer Token、内置 OAuth 2.1 授权码流程（DCR、PKCE S256、刷新令牌），或同时启用两者。令牌或 OAuth 授权码留空时通过页面保存会自动生成。桌面版还可在 macOS 菜单栏或 Windows 托盘中查看 MCP 状态并打开该设置。
+
+修改令牌或权限时会在现有 listener 上原子更新；更换端口时先成功启动新 listener，再停止旧 listener。新端口不可用或配置文件保存失败时会保留或恢复原来的 MCP 服务，不影响现有线路。
+
+权限分为三档：
+
+| 权限 | MCP 工具 |
+| --- | --- |
+| 只读 | 查看线路、活动连接、SOCKS5 历史和运行日志；获取内置 Skill |
+| 查看与启停 | 只读工具，以及启动、停止线路 |
+| 完整管理 | 增加创建、更新和删除线路；MCP 不接受或返回 SSH 密码 |
+
+配置弹窗会把已保存的令牌或 OAuth 授权码回填到密码输入框，默认隐藏，可点击眼睛查看或复制。不要将它提交到代码仓库。静态令牌模式可复制通用客户端配置；OAuth 模式可复制 Codex 命令：
+
+```bash
+codex mcp add portway --url http://127.0.0.1:7778/mcp --oauth-client-registration dcr
+```
+
+MCP 弹窗的“连接示例”同时提供 Codex、Claude Code 和通用 JSON 配置，会根据当前监听地址及 Token / OAuth 模式自动更新。Token 在页面中仍以占位符显示，只有明确点击“复制（含 Token）”时才写入剪贴板。Claude Code 的 HTTP 连接示例为：
+
+```bash
+claude mcp add --transport http --scope user portway 'http://127.0.0.1:7778/mcp'
+```
+
+`mcp add` 会立即启动 OAuth；服务器已经存在时使用 `codex mcp login portway --oauth-client-registration dcr`。OAuth 登录会打开 Portway 授权页；用户在该页面输入配置中的 OAuth 授权码并确认，授权码不会交给 Agent。Portway 提供 RFC 9728 受保护资源元数据和 RFC 8414 授权服务器元数据。MCP 请求默认不允许浏览器 Origin，未授权的工具不会出现在 Agent 的工具列表中。
+
+所有 MCP 工具调用都会写入审计日志：成功调用使用 `info`，失败和认证拒绝使用 `warn`，`initialize`、`tools/list` 等协议请求及 HTTP 状态使用 `debug`。日志只包含方法或工具名、可安全识别的线路名、结果和耗时，不记录参数正文、Bearer Token 或 SSH 凭据。需要查看完整协议请求轨迹时，将运行日志级别设为 `debug`。
+
+“下载 Skill”会取得 `portway-skill.zip`；桌面版先弹出系统保存对话框，浏览器版使用浏览器下载，用户可自行解压到 Agent 的技能目录。Skill 也可通过 `http://<MCP 监听地址>/skills/portway.zip` 下载；MCP 设置会生成可直接复制给 Agent 的一句话安装指令。已经连接 MCP 的 Agent 还可调用 `get_portway_skill`，取得同一份 `SKILL.md`、Agent 元数据和 SHA-256 校验值，再按自身运行环境安装；Portway 不会替远端 Agent 写入文件系统。
 
 ## 三种转发模式
 
@@ -133,7 +166,7 @@ Host app-server
 
 支持 SSH config 的 `HostKeyAlgorithms` 及其 `+`、`-`、`^` 修饰符。默认优先使用允许范围内已信任的密钥类型；旧版 SHA-1 `ssh-rsa` 需要显式开启。
 
-**Web / HTTP API 没有登录认证。** 默认仅监听 `127.0.0.1`，不要直接暴露到公网。线路密码保存在本机状态文件中；请保护配置目录，不要将其提交到代码仓库或放入共享目录。
+**Web / REST API 没有登录认证。** 默认仅监听 `127.0.0.1`，不要直接暴露到公网。可选的 MCP 服务使用独立回环端口及静态 Token 或 OAuth 2.1；Token 和 OAuth 授权码都应视为本机凭据。线路密码保存在本机状态文件中；请保护配置目录，不要将其提交到代码仓库或放入共享目录。
 
 ## 配置与数据
 
@@ -146,7 +179,7 @@ Host app-server
 | `logs/daemon.log` | 运行日志 |
 | `logs/connections.jsonl` | SOCKS5 已结束请求的历史记录 |
 
-页面右上角“配置”可编辑并保存 YAML。保存后需重启 daemon；桌面版需退出并重新打开。保存不会立即中断线路，但会重写配置文件，手写注释不会保留。
+页面右上角“系统配置”可编辑并保存 YAML 中的服务、日志与存储设置；其左侧的“MCP”使用独立弹窗。MCP 配置会立即应用；系统配置仍需重启 daemon，桌面版需退出并重新打开。保存不会中断线路，但会重写配置文件，手写注释不会保留。
 
 ```yaml
 addr: 127.0.0.1:7777
@@ -157,6 +190,12 @@ log_file: logs/daemon.log
 connection_log: logs/connections.jsonl
 log_max_size_mb: 20
 log_max_backups: 5
+mcp:
+  enabled: false
+  addr: 127.0.0.1:7778
+  access: operate
+  auth: token # token、oauth 或 both
+  token: ""
 ```
 
 相对路径以 YAML 所在目录为基准，也支持 `~/`。默认文件不存在时使用内置默认值，首次页面保存时创建；使用 `./portway daemon --config /path/to/config.yaml` 时，指定文件必须存在。

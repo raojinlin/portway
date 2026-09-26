@@ -116,6 +116,25 @@ export interface DaemonConfig {
   connection_log: string
   log_max_size_mb: number
   log_max_backups: number
+  mcp: MCPConfig
+}
+
+export interface MCPConfig {
+  enabled: boolean
+  addr: string
+  access: 'read' | 'operate' | 'manage'
+  auth: 'token' | 'oauth' | 'both'
+  token: string
+}
+
+export interface MCPStatus {
+  enabled: boolean
+  running: boolean
+  addr: string
+  url: string
+  access: string
+  auth: string
+  error?: string
 }
 
 export interface DaemonConfigView {
@@ -125,6 +144,7 @@ export interface DaemonConfigView {
   path: string
   exists: boolean
   restart_required: boolean
+  mcp_status: MCPStatus
 }
 export interface AutostartStatus {
   supported: boolean

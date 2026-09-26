@@ -16,6 +16,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
+async function download(path: string): Promise<Blob> {
+  const res = await fetch(path, { cache: 'no-store' })
+  if (!res.ok) throw new Error(res.statusText)
+  return res.blob()
+}
+
 export const api = {
   autostart: (signal?: AbortSignal) => request<import('./types').AutostartStatus>('/api/desktop/autostart', { signal, cache: 'no-store' }),
   setAutostart: (enabled: boolean, signal?: AbortSignal) => request<import('./types').AutostartStatus>('/api/desktop/autostart', {
@@ -29,6 +35,9 @@ export const api = {
   saveConfig: (body: DaemonConfig) => request<DaemonConfigView>('/api/config', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }),
+
+  downloadSkill: () => download('/api/skills/portway/download'),
+  saveSkillDesktop: () => request<{ path: string } | undefined>('/api/desktop/skills/portway/save', { method: 'POST' }),
 
   list: () => request<TunnelView[]>('/api/tunnels'),
 

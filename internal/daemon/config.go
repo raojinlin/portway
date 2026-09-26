@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -16,16 +18,31 @@ import (
 	"ssh-tunnel-manager/internal/store"
 )
 
+const (
+	defaultMCPAddr   = "127.0.0.1:7778"
+	defaultMCPAccess = "operate"
+	defaultMCPAuth   = "token"
+)
+
+type MCPConfig struct {
+	Enabled bool   `json:"enabled" yaml:"enabled"`
+	Addr    string `json:"addr" yaml:"addr"`
+	Access  string `json:"access" yaml:"access"`
+	Auth    string `json:"auth" yaml:"auth"`
+	Token   string `json:"token" yaml:"token"`
+}
+
 // FileConfig contains daemon settings only; tunnel definitions stay in tunnels.json.
 type FileConfig struct {
-	Addr          string `json:"addr" yaml:"addr"`
-	StatePath     string `json:"state_file" yaml:"state_file"`
-	LogLevel      string `json:"log_level" yaml:"log_level"`
-	LogFormat     string `json:"log_format" yaml:"log_format"`
-	LogFile       string `json:"log_file" yaml:"log_file"`
-	ConnectionLog string `json:"connection_log" yaml:"connection_log"`
-	LogMaxSizeMB  int    `json:"log_max_size_mb" yaml:"log_max_size_mb"`
-	LogMaxBackups int    `json:"log_max_backups" yaml:"log_max_backups"`
+	Addr          string    `json:"addr" yaml:"addr"`
+	StatePath     string    `json:"state_file" yaml:"state_file"`
+	LogLevel      string    `json:"log_level" yaml:"log_level"`
+	LogFormat     string    `json:"log_format" yaml:"log_format"`
+	LogFile       string    `json:"log_file" yaml:"log_file"`
+	ConnectionLog string    `json:"connection_log" yaml:"connection_log"`
+	LogMaxSizeMB  int       `json:"log_max_size_mb" yaml:"log_max_size_mb"`
+	LogMaxBackups int       `json:"log_max_backups" yaml:"log_max_backups"`
+	MCP           MCPConfig `json:"mcp" yaml:"mcp"`
 }
 
 func defaultFileConfig() (FileConfig, string, error) {
@@ -39,7 +56,16 @@ func defaultFileConfig() (FileConfig, string, error) {
 		LogFile:       filepath.Join(dir, "logs", "daemon.log"),
 		ConnectionLog: filepath.Join(dir, "logs", "connections.jsonl"),
 		LogMaxSizeMB:  20, LogMaxBackups: 5,
+		MCP: MCPConfig{Addr: defaultMCPAddr, Access: defaultMCPAccess, Auth: defaultMCPAuth},
 	}, filepath.Join(dir, "config.yaml"), nil
+}
+
+func newMCPToken() (string, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
 }
 
 func configPath(path, base string) (string, error) {
@@ -80,6 +106,37 @@ func (c FileConfig) validate(path string) error {
 	}
 	if c.LogMaxBackups < 1 || c.LogMaxBackups > 20 {
 		return fmt.Errorf("log_max_backups must be between 1 and 20")
+	}
+	if c.MCP.Addr == "" {
+		return fmt.Errorf("mcp.addr is required")
+	}
+	mcpHost, mcpPort, err := net.SplitHostPort(c.MCP.Addr)
+	if err != nil {
+		return fmt.Errorf("mcp.addr must be host:port: %w", err)
+	}
+	mcpIP := net.ParseIP(mcpHost)
+	if mcpIP == nil || !mcpIP.IsLoopback() {
+		return fmt.Errorf("mcp.addr must use a numeric loopback address")
+	}
+	mcpPortNumber, err := strconv.Atoi(mcpPort)
+	if err != nil || mcpPortNumber < 1 || mcpPortNumber > 65535 {
+		return fmt.Errorf("mcp.addr port must be between 1 and 65535")
+	}
+	if c.MCP.Enabled && c.MCP.Addr == c.Addr {
+		return fmt.Errorf("mcp.addr must differ from addr")
+	}
+	switch c.MCP.Access {
+	case "read", "operate", "manage":
+	default:
+		return fmt.Errorf("mcp.access must be read, operate, or manage")
+	}
+	switch c.MCP.Auth {
+	case "token", "oauth", "both":
+	default:
+		return fmt.Errorf("mcp.auth must be token, oauth, or both")
+	}
+	if c.MCP.Enabled && len(c.MCP.Token) < 32 {
+		return fmt.Errorf("mcp.token must contain at least 32 characters when enabled (it is also the OAuth signing secret)")
 	}
 	// Include archive names so rotation can never overwrite another managed file.
 	paths := map[string]bool{}

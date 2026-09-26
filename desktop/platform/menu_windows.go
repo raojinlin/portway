@@ -106,6 +106,8 @@ type trayNotifyIcon struct {
 type windowsTray struct {
 	title                       string
 	show, quit, directory, logs func()
+	mcp                         func()
+	setMCP                      func(bool)
 	copyProxy                   func(string)
 	setEnabled                  func(string, bool)
 	window                      atomic.Uintptr
@@ -127,7 +129,7 @@ func Start(title string, actions TrayActions) error {
 		winTrayMu.Unlock()
 		return fmt.Errorf("Windows tray already started")
 	}
-	t := &windowsTray{title: title, show: actions.Show, quit: actions.Quit, directory: actions.Directory, logs: actions.Logs, copyProxy: actions.Copy, setEnabled: actions.SetEnabled,
+	t := &windowsTray{title: title, show: actions.Show, quit: actions.Quit, directory: actions.Directory, logs: actions.Logs, mcp: actions.MCP, setMCP: actions.SetMCP, copyProxy: actions.Copy, setEnabled: actions.SetEnabled,
 		ready: make(chan error, 1), done: make(chan struct{})}
 	winTray = t
 	winTrayMu.Unlock()
@@ -344,6 +346,18 @@ func (t *windowsTray) openMenu(hwnd uintptr, anchor *trayPoint) {
 		go t.quit()
 	case 4:
 		go t.logs()
+	case 5:
+		if t.mcp != nil {
+			go t.mcp()
+		}
+	case 6:
+		if t.setMCP != nil {
+			go t.setMCP(true)
+		}
+	case 7:
+		if t.setMCP != nil {
+			go t.setMCP(false)
+		}
 	default:
 		if action, ok := popup.actions[command]; ok && t.setEnabled != nil {
 			go t.setEnabled(action.Name, action.Enabled)
@@ -371,6 +385,8 @@ type windowsTrayPopup struct {
 	lines           map[string]windowsLineMenu
 	title           string
 	actionsPosition uintptr
+	mcpPosition     uintptr
+	mcpMenu         uintptr
 	empty           bool
 }
 
@@ -389,10 +405,11 @@ func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPop
 		return nil, fmt.Errorf("create popup menu: %w", callErr)
 	}
 	popup := &windowsTrayPopup{handle: handle, lines: make(map[string]windowsLineMenu), copies: make(map[uintptr]string), actions: make(map[uintptr]TunnelAction), title: title, empty: len(snapshot.Lines) == 0}
-	popup.actionsPosition = uintptr(4 + len(snapshot.Lines))
+	popup.actionsPosition = uintptr(6 + len(snapshot.Lines))
 	if popup.empty {
 		popup.actionsPosition++
 	}
+	popup.mcpPosition = popup.actionsPosition - 2
 	defer func() {
 		if err != nil {
 			destroyMenu.Call(handle)
@@ -442,6 +459,35 @@ func newWindowsTrayPopup(title string, snapshot TraySnapshot) (_ *windowsTrayPop
 			return nil, err
 		}
 		popup.lines[line.Name] = entry
+	}
+	if err = appendWindowsMenu(handle, mfSeparator, 0, ""); err != nil {
+		return nil, err
+	}
+	mcpMenu, _, callErr := createPopupMenu.Call()
+	if mcpMenu == 0 {
+		return nil, fmt.Errorf("create MCP submenu: %w", callErr)
+	}
+	if err = appendWindowsMenu(handle, mfPopup, mcpMenu, labels["mcp"]); err != nil {
+		destroyMenu.Call(mcpMenu)
+		return nil, err
+	}
+	popup.mcpMenu = mcpMenu
+	mcpStatus := snapshot.MCP.Status
+	if mcpStatus == "" {
+		mcpStatus = "MCP"
+	}
+	if err = appendWindowsMenu(mcpMenu, mfDisabled, 0, mcpStatus); err != nil {
+		return nil, err
+	}
+	toggleID, toggleLabel := uintptr(6), labels["startMCP"]
+	if snapshot.MCP.Running {
+		toggleID, toggleLabel = 7, labels["stopMCP"]
+	}
+	if err = appendWindowsMenu(mcpMenu, 0, toggleID, toggleLabel); err != nil {
+		return nil, err
+	}
+	if err = appendWindowsMenu(mcpMenu, 0, 5, labels["openMCP"]); err != nil {
+		return nil, err
 	}
 	if err = appendWindowsMenu(handle, mfSeparator, 0, ""); err != nil {
 		return nil, err
@@ -505,6 +551,18 @@ func (p *windowsTrayPopup) updateProxyMenu(menu *windowsLineMenu, line TrayLine,
 
 func (p *windowsTrayPopup) refresh(snapshot TraySnapshot) {
 	labels := MenuLabels(snapshot.Language, p.title)
+	mcpStatus := snapshot.MCP.Status
+	if mcpStatus == "" {
+		mcpStatus = "MCP"
+	}
+	updateWindowsMenu(p.handle, p.mcpPosition, mfPopup, p.mcpMenu, labels["mcp"])
+	updateWindowsMenu(p.mcpMenu, 0, mfDisabled, 0, mcpStatus)
+	toggleID, toggleLabel := uintptr(6), labels["startMCP"]
+	if snapshot.MCP.Running {
+		toggleID, toggleLabel = 7, labels["stopMCP"]
+	}
+	updateWindowsMenu(p.mcpMenu, 1, 0, toggleID, toggleLabel)
+	updateWindowsMenu(p.mcpMenu, 2, 0, 5, labels["openMCP"])
 	for i, key := range []string{"open", "logs", "directory", "quit"} {
 		updateWindowsMenu(p.handle, p.actionsPosition+uintptr(i), 0, []uintptr{1, 4, 2, 3}[i], labels[key])
 	}

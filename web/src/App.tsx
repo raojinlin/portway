@@ -8,6 +8,7 @@ import Header from './components/Header'
 import LineList from './components/LineList'
 import AddLineModal from './components/AddLineModal'
 import ConfigModal from './components/ConfigModal'
+import MCPModal from './components/MCPModal'
 import { I18nProvider, useI18n } from './I18n'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
@@ -25,6 +26,7 @@ function Board() {
   const [loaded, setLoaded] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
+  const [mcpOpen, setMCPOpen] = useState(false)
   const [page, setPage] = useState<'tunnels' | 'activity'>('tunnels')
   const [activitySession, setActivitySession] = useState(0)
   const [lineSession, setLineSession] = useState(0)
@@ -34,6 +36,7 @@ function Board() {
 
   useEffect(() => listenForDesktopNavigation(() => {
     setConfigOpen(false)
+    setMCPOpen(false)
     setModalOpen(false)
     setEditingTunnel(null)
     setConnectionTarget(null)
@@ -41,11 +44,18 @@ function Board() {
     setActivitySession(value => value + 1)
   }, target => {
     setConfigOpen(false)
+    setMCPOpen(false)
     setModalOpen(false)
     setEditingTunnel(null)
     setPage('tunnels')
     setLineSession(value => value + 1)
     setConnectionTarget(target)
+  }, () => {
+    setConfigOpen(false)
+    setModalOpen(false)
+    setEditingTunnel(null)
+    setConnectionTarget(null)
+    setMCPOpen(true)
   }), [])
 
   const refresh = useCallback(async () => {
@@ -69,7 +79,8 @@ function Board() {
   return (
     <main className="app-shell">
       <div className="app-frame">
-        <Header tunnels={tunnels} onAddClick={() => { setEditingTunnel(null); setModalOpen(true) }} onConfigClick={() => setConfigOpen(true)} />
+        <Header tunnels={tunnels} onAddClick={() => { setEditingTunnel(null); setModalOpen(true) }}
+          onMCPClick={() => setMCPOpen(true)} onConfigClick={() => setConfigOpen(true)} />
         <nav className="page-navigation" aria-label={tr('页面导航')}>
           <button type="button" aria-current={page === 'tunnels' ? 'page' : undefined} onClick={() => setPage('tunnels')}><SwapOutlined />{tr('转发线路')}</button>
           <button type="button" aria-current={page === 'activity' ? 'page' : undefined} onClick={() => setPage('activity')}><FileTextOutlined />{tr('日志与连接')}</button>
@@ -84,6 +95,7 @@ function Board() {
       </div>
 
       {configOpen && <ConfigModal onClose={() => setConfigOpen(false)} />}
+      {mcpOpen && <MCPModal onClose={() => setMCPOpen(false)} />}
       {connectionTarget && <ConnectionModal key={`${connectionTarget.name}:${lineSession}`} name={connectionTarget.name} showHistory={connectionTarget.showHistory} onClose={() => setConnectionTarget(null)} />}
       <AddLineModal
         open={modalOpen}

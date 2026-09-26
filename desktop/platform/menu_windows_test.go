@@ -25,7 +25,7 @@ func TestWindowsTrayContextPoint(t *testing.T) {
 }
 
 func TestWindowsTrayPopupRefresh(t *testing.T) {
-	snapshot := TraySnapshot{Summary: "Running 1", Traffic: "1024 B/s", Lines: []TrayLine{{Name: "test&line", Enabled: true, Title: "test&line running", Details: []string{"RX 1024 B", "Connections 2"}, ProxyURL: "socks5h://127.0.0.1:1080", ProxyCommand: "$env:ALL_PROXY='socks5h://127.0.0.1:1080'"}}}
+	snapshot := TraySnapshot{Summary: "Running 1", Traffic: "1024 B/s", MCP: TrayMCP{Running: true, State: "running", Status: "MCP: Running"}, Lines: []TrayLine{{Name: "test&line", Enabled: true, Title: "test&line running", Details: []string{"RX 1024 B", "Connections 2"}, ProxyURL: "socks5h://127.0.0.1:1080", ProxyCommand: "$env:ALL_PROXY='socks5h://127.0.0.1:1080'"}}}
 	popup, err := newWindowsTrayPopup("Portway", snapshot)
 	if err != nil {
 		t.Fatal(err)
@@ -72,6 +72,15 @@ func TestWindowsTrayPopupRefresh(t *testing.T) {
 	if read(popup.handle, popup.actionsPosition) != "Open Portway" || read(popup.handle, popup.actionsPosition+1) != "Open Logs" || read(popup.handle, popup.actionsPosition+3) != "Quit Portway" {
 		t.Fatal("open menu did not switch language")
 	}
+	if read(popup.handle, popup.mcpPosition) != "MCP" || read(popup.mcpMenu, 0) != snapshot.MCP.Status || read(popup.mcpMenu, 1) != "Stop MCP" || read(popup.mcpMenu, 2) != "Open MCP Settings" {
+		t.Fatal("MCP status or action did not update")
+	}
+	snapshot.MCP.Running = false
+	snapshot.MCP.Status = "MCP: Disabled"
+	popup.refresh(snapshot)
+	if read(popup.mcpMenu, 0) != snapshot.MCP.Status || read(popup.mcpMenu, 1) != "Start MCP" {
+		t.Fatal("MCP submenu did not switch to its start action")
+	}
 	proxyURL, proxyCommand := snapshot.Lines[0].ProxyURL, snapshot.Lines[0].ProxyCommand
 	snapshot.Lines[0].Busy = true
 	popup.refresh(snapshot)
@@ -117,7 +126,7 @@ func TestWindowsTrayEmptyPopup(t *testing.T) {
 	}
 	defer destroyMenu.Call(popup.handle)
 	count, _, _ := trayUser32.NewProc("GetMenuItemCount").Call(popup.handle)
-	if count != 9 || len(popup.lines) != 0 {
+	if count != 11 || len(popup.lines) != 0 {
 		t.Fatalf("unexpected empty menu: %d items", count)
 	}
 }

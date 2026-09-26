@@ -51,13 +51,14 @@ tar.gz 解压后可运行 `usr/bin/portway`，但需自行安装运行依赖。�
 
 ### 菜单栏与托盘
 
-macOS 菜单栏和 Windows 托盘可查看各条线路的状态、转发地址、累计流量、连接数和最近错误，数据每 2 秒更新。
+macOS 菜单栏和 Windows 托盘可查看各条线路的状态、转发地址、累计流量、连接数和最近错误，数据每 2 秒更新。顶层菜单只保留紧凑的“MCP”入口；子菜单显示运行状态，并可直接启动或停止 MCP。macOS 可在状态项上悬停查看监听地址、授权方式和 Agent 权限；菜单不显示 MCP Token 或 OAuth 授权码。
 
 macOS 线路名前同时显示状态圆点和服务图标。服务图标沿用线路的自动识别或手动选择，停止后仍保留；数据库图标带 MY / PG / R / M 标记便于区分。悬停可查看服务名称，修改图标后自动同步到菜单栏。
 
 菜单提供：
 
 - **打开 Portway**：显示主窗口。
+- **MCP 子菜单**：查看简短状态，直接启动/停止 MCP，或显示主窗口并打开 MCP 设置。
 - **打开日志**：显示主窗口并进入运行日志页。
 - **打开配置目录**：定位本机配置与日志文件。
 - **退出 Portway**：停止应用及其托管的转发。
@@ -74,7 +75,7 @@ macOS 图标右侧分两行显示所有线路的合计速率：上方上传、�
 
 ### 语言与主题
 
-窗口右上角依次提供语言、主题和配置入口。语言可选自动检测、简体中文或 English，原生菜单同步切换；主题可选跟随系统、浅色或深色。偏好保存在本机 WebView 中。
+窗口右上角依次提供语言、主题、MCP 和系统配置入口。语言可选自动检测、简体中文或 English，原生菜单同步切换；主题可选跟随系统、浅色或深色。偏好保存在本机 WebView 中。
 
 macOS 标题栏与页面背景同步；Windows 标题栏颜色取决于系统支持；Linux 原生标题栏由桌面环境控制。原始 SSH 错误和日志不参与翻译。
 
@@ -86,11 +87,11 @@ macOS 标题栏与页面背景同步；Windows 标题栏颜色取决于系统支
 - Windows：`%USERPROFILE%\.config\ssh-tunnel-manager\`
 - 自定义目录：`$XDG_CONFIG_HOME/ssh-tunnel-manager/`
 
-“配置”弹窗保存到 `config.yaml`，退出并重开应用后生效。线路单独保存在 `tunnels.json`，运行日志与连接历史位于 `logs/`。完整字段和保留策略见 [配置与数据](../README.md#配置与数据)。
+“系统配置”和“MCP”弹窗都保存到 `config.yaml`。MCP 弹窗内置 Codex、Claude Code 和通用 JSON 连接示例，并随当前 Token / OAuth 方式更新。MCP 配置立即生效，系统配置需退出并重开应用。线路单独保存在 `tunnels.json`，运行日志与连接历史位于 `logs/`。完整字段和保留策略见 [配置与数据](../README.md#配置与数据)。
 
 需要注意的边界：
 
-- 桌面后端在应用进程内运行，**不监听 HTTP 端口**。YAML 的 `addr` 仅用于 CLI daemon；`portway list/start/stop` 不会连接桌面后端。
+- 桌面后端在应用进程内运行，默认不监听管理页面与 REST API 的 HTTP 端口。YAML 的 `addr` 仅用于 CLI daemon；`portway list/start/stop` 不会连接桌面后端。启用 MCP 后会单独监听配置的本机回环端口，可使用静态 Token、OAuth 2.1 或同时启用两者。桌面版下载内置 Skill 时会弹出系统保存对话框；也可把独立 MCP 弹窗中的一句话指令交给 Agent，由它通过 `/skills/portway.zip` 自行下载安装。
 - 桌面端和新版 CLI daemon 通过文件锁避免同时占用共享数据。切换使用方式前应退出另一端；旧版 daemon 可能不支持该锁。
 - 普通 SSH 与 `ProxyJump` 不依赖外部命令，但自定义 `ProxyCommand` 仍可能依赖 shell 和其他程序。Windows 不提供 `/bin/sh`，建议使用原生 `ProxyJump`。
 - agent 目前通过 Unix socket 接入，不支持 Windows OpenSSH 的命名管道 agent。Windows 可使用未加密私钥或密码。

@@ -36,6 +36,7 @@ type Options struct {
 type Server struct {
 	ctx             context.Context
 	mu              sync.Mutex
+	configMu        sync.Mutex
 	store           *store.Store
 	state           store.State
 	manager         *tunnel.Manager
@@ -44,6 +45,8 @@ type Server struct {
 	effectiveConfig FileConfig
 	history         *historyLog
 	desktop         bool
+	mcpStatus       MCPStatus
+	applyMCP        func(MCPConfig) error
 }
 
 // Run starts the daemon and blocks until ctx is cancelled, then shuts down

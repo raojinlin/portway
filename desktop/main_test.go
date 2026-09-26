@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func TestNativeMenusStartWithoutDOMReady(t *testing.T) {
 	updates := make(chan platform.TraySnapshot, 1)
 	err := a.startDesktop(context.Background(), nativeMenus{
 		start: func(title string, actions platform.TrayActions) error {
-			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.Copy == nil || actions.SetEnabled == nil || actions.Connections == nil {
+			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.MCP == nil || actions.SetMCP == nil || actions.Copy == nil || actions.SetEnabled == nil || actions.Connections == nil {
 				t.Fatal("missing native title or menu actions")
 			}
 			if a.service == nil {
@@ -114,6 +115,22 @@ func TestLogNavigationRemainsPendingUntilApplied(t *testing.T) {
 	}
 }
 
+func TestMCPNavigationRemainsPendingUntilApplied(t *testing.T) {
+	a := &application{}
+	a.openMCP()
+	if !a.pendingMCP || a.pendingLogs || a.pendingConnections != nil {
+		t.Fatal("MCP navigation was not retained exclusively")
+	}
+	a.navigationApplied("activity")
+	if !a.pendingMCP {
+		t.Fatal("unrelated acknowledgement cleared MCP navigation")
+	}
+	a.navigationApplied("mcp")
+	if a.pendingMCP {
+		t.Fatal("applied MCP navigation retained")
+	}
+}
+
 func TestConnectionNavigationKeepsLatestTargetUntilApplied(t *testing.T) {
 	a := &application{}
 	a.openConnections("first", false)
@@ -138,6 +155,14 @@ func TestConnectionNavigationKeepsLatestTargetUntilApplied(t *testing.T) {
 	a.openLogs()
 	if !a.pendingLogs || a.pendingConnections != nil {
 		t.Fatal("logs did not replace connection navigation")
+	}
+	a.openMCP()
+	if !a.pendingMCP || a.pendingLogs || a.pendingConnections != nil {
+		t.Fatal("MCP did not replace log navigation")
+	}
+	a.openConnections("latest", false)
+	if a.pendingMCP || a.pendingLogs || a.pendingConnections == nil {
+		t.Fatal("connections did not replace MCP navigation")
 	}
 }
 
@@ -290,6 +315,21 @@ func TestDesktopTransportAndConfiguration(t *testing.T) {
 		if req.Header.Get("Origin") != origin {
 			t.Fatal("transport mutated original headers")
 		}
+	}
+	var savedSkill []byte
+	a.saveSkill = func(archive []byte) (string, error) {
+		savedSkill = append([]byte(nil), archive...)
+		return filepath.Join(t.TempDir(), "portway-skill.zip"), nil
+	}
+	w = httptest.NewRecorder()
+	a.serve(w, httptest.NewRequest("POST", "/api/desktop/skills/portway/save", nil))
+	if w.Code != 200 || len(savedSkill) < 4 || string(savedSkill[:2]) != "PK" || !strings.Contains(w.Body.String(), "portway-skill.zip") {
+		t.Fatalf("save skill: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	a.serve(w, httptest.NewRequest("GET", "/api/desktop/skills/portway/save", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("save skill GET status = %d", w.Code)
 	}
 	if err := a.service.Close(); err != nil {
 		t.Fatal(err)

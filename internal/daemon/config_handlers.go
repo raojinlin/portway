@@ -2,12 +2,20 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 )
+
+var errConfigUnavailable = errors.New("configuration unavailable")
+
+type invalidConfigError struct{ err error }
+
+func (e invalidConfigError) Error() string { return e.err.Error() }
 
 type configView struct {
 	Config          FileConfig `json:"config"`
@@ -16,12 +24,14 @@ type configView struct {
 	Exists          bool       `json:"exists"`
 	RestartRequired bool       `json:"restart_required"`
 	Desktop         bool       `json:"desktop"`
+	MCPStatus       MCPStatus  `json:"mcp_status"`
 }
 
 func (s *Server) configViewLocked() configView {
 	_, err := os.Stat(s.configPath)
 	return configView{Config: s.savedConfig, Effective: s.effectiveConfig, Path: s.configPath,
-		Exists: err == nil, RestartRequired: s.savedConfig != s.effectiveConfig, Desktop: s.desktop}
+		Exists: err == nil, RestartRequired: s.savedConfig != s.effectiveConfig, Desktop: s.desktop,
+		MCPStatus: s.mcpStatus}
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
@@ -60,20 +70,77 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "expected one configuration object")
 		return
 	}
+	view, err := s.saveFileConfig(config)
+	if err != nil {
+		status := http.StatusInternalServerError
+		var invalid invalidConfigError
+		if errors.As(err, &invalid) {
+			status = http.StatusBadRequest
+		} else if errors.Is(err, errConfigUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		writeError(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) saveFileConfig(config FileConfig) (configView, error) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	return s.saveFileConfigLocked(config)
+}
+
+// saveFileConfigLocked persists one complete configuration and hot-applies MCP.
+// The caller must hold configMu so read-modify-write callers cannot lose updates.
+func (s *Server) saveFileConfigLocked(config FileConfig) (configView, error) {
+	if config.MCP.Enabled && config.MCP.Token == "" {
+		token, err := newMCPToken()
+		if err != nil {
+			return configView{}, fmt.Errorf("generate MCP token: %w", err)
+		}
+		config.MCP.Token = token
+	}
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.configPath == "" {
-		writeError(w, http.StatusServiceUnavailable, "configuration unavailable")
-		return
+		s.mu.Unlock()
+		return configView{}, errConfigUnavailable
 	}
-	if err := config.validate(s.configPath); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+	path, effective, status, applyMCP := s.configPath, s.effectiveConfig, s.mcpStatus, s.applyMCP
+	s.mu.Unlock()
+	if err := config.validate(path); err != nil {
+		return configView{}, invalidConfigError{err: err}
 	}
-	if err := saveConfig(s.configPath, config); err != nil {
-		writeError(w, http.StatusInternalServerError, "save configuration: "+err.Error())
-		return
+	apply := applyMCP != nil && (config.MCP != effective.MCP || config.MCP.Enabled && !status.Running)
+	if apply {
+		if err := applyMCP(config.MCP); err != nil {
+			return configView{}, fmt.Errorf("apply MCP configuration: %w", err)
+		}
 	}
+	if err := saveConfig(path, config); err != nil {
+		message := "save configuration: " + err.Error()
+		if apply {
+			rollback := effective.MCP
+			if !status.Running {
+				rollback.Enabled = false
+			}
+			if rollbackErr := applyMCP(rollback); rollbackErr != nil {
+				message = fmt.Sprintf("%s; restore MCP configuration: %v", message, rollbackErr)
+			} else {
+				s.mu.Lock()
+				s.mcpStatus = status
+				s.mu.Unlock()
+			}
+		}
+		return configView{}, errors.New(message)
+	}
+	s.mu.Lock()
 	s.savedConfig = config
-	writeJSON(w, http.StatusOK, s.configViewLocked())
+	if apply {
+		s.effectiveConfig.MCP = config.MCP
+	}
+	view := s.configViewLocked()
+	s.mu.Unlock()
+	return view, nil
 }

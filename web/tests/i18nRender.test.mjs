@@ -46,13 +46,15 @@ function ui(language, queryState) {
 test('Chinese and English pages render translated buttons and SOCKS routes without a daemon', () => {
   for (const language of ['zh', 'en']) {
     const render = ui(language)
-    const header = render('components/Header.tsx', { tunnels: [], onAddClick() {}, onConfigClick() {} })
+    const header = render('components/Header.tsx', { tunnels: [], onAddClick() {}, onMCPClick() {}, onConfigClick() {} })
     assert.ok(header.includes(language === 'en' ? 'New tunnel' : '新建线路'))
-    assert.ok(header.includes(language === 'en' ? 'Settings' : '配置'))
+    assert.ok(header.includes('MCP'))
+    assert.ok(header.includes(language === 'en' ? 'System settings' : '系统配置'))
     const languageIndex = header.indexOf(language === 'en' ? 'Language' : '切换语言')
     const themeIndex = header.indexOf(language === 'en' ? 'Choose theme' : '选择主题')
-    const configIndex = header.indexOf(language === 'en' ? 'Open settings' : '打开配置')
-    assert.ok(languageIndex < themeIndex && themeIndex < configIndex, 'theme must immediately follow language, before settings')
+    const mcpIndex = header.indexOf(language === 'en' ? 'Open MCP settings' : '打开 MCP 设置')
+    const configIndex = header.indexOf(language === 'en' ? 'Open system settings' : '打开系统配置')
+    assert.ok(languageIndex < themeIndex && themeIndex < mcpIndex && mcpIndex < configIndex, 'MCP must appear between theme and system settings')
     const line = render('components/LineRow.tsx', {
       tunnel: { Name: 'example', State: 'running', direction: 'dynamic', local_listen: '127.0.0.1:1080', ssh_address: 'gateway', enabled: true, BytesIn: 1024, BytesOut: 512 },
       onChanged() {}, onEdit() {},
@@ -87,6 +89,20 @@ test('autostart setting renders localized label and immediate-save guidance', ()
     assert.ok(html.includes(language === 'en' ? 'Changes save immediately' : '开关立即保存'))
     assert.ok(html.includes('role="switch"'))
     assert.ok(html.includes('aria-checked="false"'))
+    if (language === 'en') assert.doesNotMatch(html, /[\p{Script=Han}]/u)
+  }
+})
+
+test('MCP connection examples cover Codex, Claude Code and generic clients without exposing the token', () => {
+  for (const language of ['zh', 'en']) {
+    const html = ui(language)('components/MCPConnectionExamples.tsx', {
+      auth: 'both', token: 'secret-token-that-must-not-render-123456', url: 'http://127.0.0.1:7778/mcp', onCopy() {},
+    })
+    assert.ok(html.includes('codex mcp add portway --url http://127.0.0.1:7778/mcp --oauth-client-registration dcr'))
+    assert.ok(html.includes('claude mcp add --transport http --scope user'))
+    assert.ok(html.includes('&lt;PORTWAY_TOKEN&gt;'))
+    assert.ok(!html.includes('secret-token-that-must-not-render-123456'))
+    assert.ok(html.includes(language === 'en' ? 'Other clients' : '其他客户端'))
     if (language === 'en') assert.doesNotMatch(html, /[\p{Script=Han}]/u)
   }
 })

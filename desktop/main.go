@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -35,9 +36,11 @@ type application struct {
 	nativeMu           sync.Mutex
 	language           string
 	pendingLogs        bool
+	pendingMCP         bool
 	pendingConnections *connectionNavigation
 	trayPending        map[string]bool
 	trayRefresh        chan struct{}
+	saveSkill          func([]byte) (string, error)
 }
 
 func (a *application) startup(ctx context.Context) {
@@ -74,11 +77,62 @@ func (a *application) serve(w http.ResponseWriter, r *http.Request) {
 		autostartHandler(autostart.Get, autostart.Set).ServeHTTP(w, r)
 		return
 	}
+	if r.URL.Path == "/api/desktop/skills/portway/save" {
+		a.savePortwaySkill(w, r)
+		return
+	}
 	// Wails owns this in-process transport. Its webview uses a custom origin,
 	// not the public HTTP daemon's http/https origin; do not weaken HTTP checks.
 	r = r.Clone(r.Context())
 	r.Header.Del("Origin")
 	service.ServeHTTP(w, r)
+}
+
+func (a *application) savePortwaySkill(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	archive, err := daemon.BuiltinPortwaySkillArchive()
+	if err != nil {
+		http.Error(w, "package Portway Skill: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	save := a.saveSkill
+	if save == nil {
+		save = a.saveSkillWithDialog
+	}
+	path, err := save(archive)
+	if err != nil {
+		http.Error(w, "save Portway Skill: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if path == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"path": path})
+}
+
+func (a *application) saveSkillWithDialog(archive []byte) (string, error) {
+	a.mu.RLock()
+	ctx := a.ctx
+	a.mu.RUnlock()
+	if ctx == nil {
+		return "", errors.New("desktop window is not ready")
+	}
+	path, err := wruntime.SaveFileDialog(ctx, wruntime.SaveDialogOptions{
+		Title: "Save Portway Skill", DefaultFilename: "portway-skill.zip", CanCreateDirectories: true,
+		Filters: []wruntime.FileFilter{{DisplayName: "ZIP archive (*.zip)", Pattern: "*.zip"}},
+	})
+	if err != nil || path == "" {
+		return path, err
+	}
+	if err := os.WriteFile(path, archive, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func (a *application) show() {
@@ -99,6 +153,17 @@ func (a *application) domReady(ctx context.Context) {
 func (a *application) openLogs() {
 	a.mu.Lock()
 	a.pendingLogs = true
+	a.pendingMCP = false
+	a.pendingConnections = nil
+	a.mu.Unlock()
+	a.show()
+	a.sendNavigation()
+}
+
+func (a *application) openMCP() {
+	a.mu.Lock()
+	a.pendingLogs = false
+	a.pendingMCP = true
 	a.pendingConnections = nil
 	a.mu.Unlock()
 	a.show()
@@ -117,6 +182,7 @@ func (a *application) openConnections(name string, showHistory bool) {
 	}
 	a.mu.Lock()
 	a.pendingLogs = false
+	a.pendingMCP = false
 	a.pendingConnections = &connectionNavigation{Page: "connections", Name: name, ShowHistory: showHistory}
 	a.mu.Unlock()
 	a.show()
@@ -125,10 +191,12 @@ func (a *application) openConnections(name string, showHistory bool) {
 
 func (a *application) sendNavigation() {
 	a.mu.RLock()
-	ctx, pending, connections := a.ctx, a.pendingLogs, a.pendingConnections
+	ctx, pendingLogs, pendingMCP, connections := a.ctx, a.pendingLogs, a.pendingMCP, a.pendingConnections
 	a.mu.RUnlock()
-	if ctx != nil && pending {
+	if ctx != nil && pendingLogs {
 		wruntime.EventsEmit(ctx, "desktop:navigate", "activity")
+	} else if ctx != nil && pendingMCP {
+		wruntime.EventsEmit(ctx, "desktop:navigate", "mcp")
 	} else if ctx != nil && connections != nil {
 		wruntime.EventsEmit(ctx, "desktop:navigate", connections)
 	}
@@ -142,6 +210,9 @@ func (a *application) navigationApplied(data ...interface{}) {
 	defer a.mu.Unlock()
 	if page, ok := data[0].(string); ok && page == "activity" {
 		a.pendingLogs = false
+	}
+	if page, ok := data[0].(string); ok && page == "mcp" {
+		a.pendingMCP = false
 	}
 	if page, ok := data[0].(map[string]interface{}); ok && a.pendingConnections != nil && page["page"] == "connections" && page["name"] == a.pendingConnections.Name && page["showHistory"] == a.pendingConnections.ShowHistory {
 		a.pendingConnections = nil
@@ -195,7 +266,22 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 	executable, _ := os.Executable()
 	service.Logger().Info("desktop native menus initializing", "app", applicationTitle, "platform", runtime.GOOS, "executable", executable)
 	if err := menus.start(applicationTitle, platform.TrayActions{
-		Show: a.show, Quit: func() { wruntime.Quit(ctx) }, Directory: func() { platform.OpenDirectory(service.ConfigDirectory()) }, Logs: a.openLogs,
+		Show: a.show, Quit: func() { wruntime.Quit(ctx) }, Directory: func() { platform.OpenDirectory(service.ConfigDirectory()) }, Logs: a.openLogs, MCP: a.openMCP,
+		SetMCP: func(enabled bool) {
+			if err := service.SetMCPEnabled(enabled); err != nil {
+				service.Logger().Warn("desktop MCP action failed", "enabled", enabled, "error", err)
+				a.mu.RLock()
+				language := a.language
+				a.mu.RUnlock()
+				_, _ = wruntime.MessageDialog(ctx, wruntime.MessageDialogOptions{Type: wruntime.ErrorDialog,
+					Title: trayText(language, "MCP 操作失败", "MCP action failed"), Message: err.Error(),
+					Buttons: []string{trayText(language, "好", "OK")}})
+			}
+			select {
+			case a.trayRefresh <- struct{}{}:
+			default:
+			}
+		},
 		Connections: a.openConnections,
 		SetEnabled: func(name string, enabled bool) {
 			if err := a.changeTunnel(name, enabled); err != nil {
@@ -231,6 +317,7 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 			sampler.language = a.language
 			a.mu.RUnlock()
 			snapshot := sampler.sample(service.TunnelViews(), time.Now())
+			snapshot.MCP = trayMCPStatus(service.MCPStatus(), sampler.language)
 			a.mu.RLock()
 			for i := range snapshot.Lines {
 				snapshot.Lines[i].Busy = a.trayPending[snapshot.Lines[i].Name]

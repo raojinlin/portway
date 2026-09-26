@@ -50,6 +50,9 @@ static NSStatusItem *statusItem;
 static STMMenuTarget *menuTarget;
 static NSImage *traySymbol;
 static NSMenuItem *emptyItem;
+static NSMenuItem *mcpMenuItem;
+static NSMenuItem *mcpStatusItem;
+static NSMenuItem *mcpToggleItem;
 static NSMutableDictionary<NSString *, NSMenuItem *> *lineItems;
 static NSMutableDictionary<NSString *, NSImage *> *stateImages;
 static NSString *trayName;
@@ -141,12 +144,18 @@ static void stmUpdateMenuLanguage(NSDictionary *labels) {
     if (![labels isKindOfClass:NSDictionary.class]) return;
     menuTarget.labels = labels;
     stmTranslateMenu(NSApp.mainMenu, labels);
-    NSArray *keys = @[@"open", @"directory", @"quit", @"logs"];
+    NSArray *keys = @[@"open", @"directory", @"quit", @"logs", @"openMCP", @"startMCP", @"stopMCP"];
     for (NSMenuItem *item in statusItem.menu.itemArray) {
-        if (item.tag < 1 || item.tag > 4) continue;
+        if (item.tag < 1 || item.tag > 7) continue;
         NSString *title = labels[keys[item.tag - 1]];
         if ([title isKindOfClass:NSString.class]) item.title = title;
     }
+    for (NSMenuItem *item in mcpMenuItem.submenu.itemArray) {
+        if (item.tag < 1 || item.tag > 7) continue;
+        NSString *title = labels[keys[item.tag - 1]];
+        if ([title isKindOfClass:NSString.class]) item.title = title;
+    }
+    if ([labels[@"mcp"] isKindOfClass:NSString.class]) mcpMenuItem.title = labels[@"mcp"];
     if ([labels[@"empty"] isKindOfClass:NSString.class]) emptyItem.title = labels[@"empty"];
 }
 
@@ -348,6 +357,22 @@ int stmTrayStart(const char *value) {
         lineItems = [NSMutableDictionary new];
         stateImages = [NSMutableDictionary new];
         [menu addItem:[NSMenuItem separatorItem]];
+        mcpMenuItem = [[NSMenuItem alloc] initWithTitle:@"MCP" action:nil keyEquivalent:@""];
+        NSMenu *mcpMenu = [NSMenu new];
+        mcpStatusItem = [[NSMenuItem alloc] initWithTitle:@"MCP: Disabled" action:nil keyEquivalent:@""];
+        mcpStatusItem.enabled = NO;
+        [mcpMenu addItem:mcpStatusItem];
+        mcpToggleItem = [[NSMenuItem alloc] initWithTitle:@"Start MCP" action:@selector(activate:) keyEquivalent:@""];
+        mcpToggleItem.target = menuTarget;
+        mcpToggleItem.tag = 6;
+        [mcpMenu addItem:mcpToggleItem];
+        NSMenuItem *openMCP = [[NSMenuItem alloc] initWithTitle:@"Open MCP Settings" action:@selector(activate:) keyEquivalent:@""];
+        openMCP.target = menuTarget;
+        openMCP.tag = 5;
+        [mcpMenu addItem:openMCP];
+        mcpMenuItem.submenu = mcpMenu;
+        [menu addItem:mcpMenuItem];
+        [menu addItem:[NSMenuItem separatorItem]];
         NSArray<NSString *> *titles = @[
             [@"Open " stringByAppendingString:name], @"Open Logs", @"Open Configuration Folder", [@"Quit " stringByAppendingString:name]
         ];
@@ -443,6 +468,18 @@ void stmTrayUpdate(const char *value) {
         statusItem.button.toolTip = trayName;
         NSArray *rates = [statusText componentsSeparatedByString:@"\n"];
         NSDictionary *labels = snapshot[@"labels"];
+        NSDictionary *mcp = snapshot[@"mcp"];
+        if ([mcp isKindOfClass:NSDictionary.class]) {
+            NSString *mcpStatus = mcp[@"status"];
+            if ([mcpStatus isKindOfClass:NSString.class] && mcpStatus.length > 0) mcpStatusItem.title = mcpStatus;
+            NSString *mcpDetail = mcp[@"detail"];
+            mcpStatusItem.toolTip = [mcpDetail isKindOfClass:NSString.class] ? mcpDetail : nil;
+            mcpStatusItem.image = stmStateImage(mcp[@"state"]);
+            BOOL running = [mcp[@"running"] boolValue];
+            mcpToggleItem.tag = running ? 7 : 6;
+            NSString *toggleKey = running ? @"stopMCP" : @"startMCP";
+            if ([labels[toggleKey] isKindOfClass:NSString.class]) mcpToggleItem.title = labels[toggleKey];
+        }
         if (rates.count == 2) {
             statusItem.button.toolTip = [statusItem.button.toolTip stringByAppendingFormat:@"\n%@: %@\n%@: %@",
                 labels[@"upload"], rates[0], labels[@"download"], rates[1]];
@@ -500,6 +537,9 @@ void stmTrayStop(void) {
         statusItem = nil;
         traySymbol = nil;
         emptyItem = nil;
+        mcpMenuItem = nil;
+        mcpStatusItem = nil;
+        mcpToggleItem = nil;
         lineItems = nil;
         stateImages = nil;
         trayName = nil;

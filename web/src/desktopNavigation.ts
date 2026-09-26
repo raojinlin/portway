@@ -5,11 +5,12 @@ interface DesktopNavigationRuntime {
 
 export interface ConnectionNavigation { name: string; showHistory: boolean }
 
-export function listenForDesktopNavigation(onLogs: () => void, onConnections?: (target: ConnectionNavigation) => void): () => void {
+export function listenForDesktopNavigation(onLogs: () => void, onConnections?: (target: ConnectionNavigation) => void, onMCP?: () => void): () => void {
   const runtime = (window as Window & { runtime?: DesktopNavigationRuntime }).runtime
   if (!runtime?.EventsOn || !runtime?.EventsEmit) return () => {}
   const unsubscribe = runtime.EventsOn('desktop:navigate', page => {
     if (page === 'activity') onLogs()
+    else if (page === 'mcp' && onMCP) onMCP()
     else if (page && typeof page === 'object' && 'page' in page && page.page === 'connections' &&
       'name' in page && typeof page.name === 'string' && page.name.length > 0 &&
       'showHistory' in page && typeof page.showHistory === 'boolean' && onConnections) {

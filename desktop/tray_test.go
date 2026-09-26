@@ -155,6 +155,27 @@ func TestTrayRequestErrorDoesNotChangeRunningState(t *testing.T) {
 	}
 }
 
+func TestTrayMCPStatus(t *testing.T) {
+	running := trayMCPStatus(daemon.MCPStatus{
+		Enabled: true, Running: true, Addr: "127.0.0.1:7778", Auth: "both", Access: "manage",
+	}, "zh")
+	if !running.Running || running.State != "running" || running.Status != "MCP：运行中" || !strings.Contains(running.Detail, "Token + OAuth 2.1") || !strings.Contains(running.Detail, "完整管理") {
+		t.Fatalf("unexpected running MCP status: %+v", running)
+	}
+
+	failed := trayMCPStatus(daemon.MCPStatus{
+		Enabled: true, Addr: "127.0.0.1:7778", Auth: "oauth", Access: "read", Error: "address\nalready in use",
+	}, "en")
+	if failed.State != "error" || !strings.Contains(failed.Status, "Failed to start") || strings.Contains(failed.Detail, "\n") || !strings.Contains(failed.Detail, "address already in use") {
+		t.Fatalf("unexpected failed MCP status: %+v", failed)
+	}
+
+	disabled := trayMCPStatus(daemon.MCPStatus{Addr: "127.0.0.1:7778", Auth: "token", Access: "operate"}, "en")
+	if disabled.Running || disabled.State != "stopped" || disabled.Status != "MCP: Disabled" || !strings.Contains(disabled.Detail, "Inspect and operate") {
+		t.Fatalf("unexpected disabled MCP status: %+v", disabled)
+	}
+}
+
 func TestTrayFormatting(t *testing.T) {
 	if trayBytes(1024) != "1.0 KiB" || trayBytes(-1) != "0 B" || trayBytes(0) != "0 B" {
 		t.Fatal("unexpected byte formatting")

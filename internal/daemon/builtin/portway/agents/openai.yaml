@@ -1,0 +1,5 @@
+interface:
+  display_name: "Portway"
+  short_description: "Manage SSH tunnels through Portway MCP"
+  default_prompt: "Use $portway to inspect my tunnels and help me make the requested change."
+

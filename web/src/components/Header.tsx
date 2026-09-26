@@ -1,4 +1,4 @@
-import { DesktopOutlined, GlobalOutlined, MoonOutlined, PlusOutlined, SettingOutlined, SunOutlined } from '@ant-design/icons'
+import { ApiOutlined, DesktopOutlined, GlobalOutlined, MoonOutlined, PlusOutlined, SettingOutlined, SunOutlined } from '@ant-design/icons'
 import { Button, Dropdown, Tooltip } from 'antd'
 import type { TunnelView } from '../types'
 import { useThemeMode } from '../ThemeMode'
@@ -7,10 +7,11 @@ import { useI18n } from '../I18n'
 interface Props {
   tunnels: TunnelView[]
   onAddClick: () => void
+  onMCPClick: () => void
   onConfigClick: () => void
 }
 
-export default function Header({ tunnels, onAddClick, onConfigClick }: Props) {
+export default function Header({ tunnels, onAddClick, onMCPClick, onConfigClick }: Props) {
   const { tr, preference: languagePreference, setPreference: setLanguagePreference } = useI18n()
   const { mode, preference, setPreference } = useThemeMode()
   const themeLabel = preference === 'system' ? tr("跟随系统") : preference === 'dark' ? tr("深色") : tr("浅色")
@@ -50,8 +51,11 @@ export default function Header({ tunnels, onAddClick, onConfigClick }: Props) {
               aria-label={tr('选择主题，当前{theme}', { theme: themeLabel })}
             />
           </Dropdown>
-          <Tooltip title={tr("daemon 配置与日志设置，保存到 YAML 文件")}>
-            <Button icon={<SettingOutlined />} onClick={onConfigClick} aria-label={tr("打开配置")}>{tr("配置")}</Button>
+          <Tooltip title={tr('配置本机 MCP 服务、Agent 权限和 Skill')}>
+            <Button icon={<ApiOutlined />} onClick={onMCPClick} aria-label={tr('打开 MCP 设置')}>MCP</Button>
+          </Tooltip>
+          <Tooltip title={tr('系统、日志与存储设置，保存到 YAML 文件')}>
+            <Button icon={<SettingOutlined />} onClick={onConfigClick} aria-label={tr('打开系统配置')}>{tr('系统配置')}</Button>
           </Tooltip>
           <Button type="primary" icon={<PlusOutlined />} onClick={onAddClick}>{tr("新建线路")}</Button>
         </div>

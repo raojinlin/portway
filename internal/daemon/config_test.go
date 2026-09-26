@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -67,6 +68,8 @@ func TestYAMLConfigRejectsInvalid(t *testing.T) {
 		"connection_log: ''\n", "log_max_size_mb: 0\n", "log_max_backups: 0\n", "log_max_backups: 21\n",
 		"unexpected_field: value\n", "addr: localhost:1\naddr: localhost:2\n", "{}\n---\n{}\n", "[invalid\n",
 		"state_file: same\nconnection_log: same\n", "log_file: same\nconnection_log: same.1\n", "connection_log: config.yaml\n",
+		"mcp:\n  enabled: true\n  addr: 0.0.0.0:7778\n  access: operate\n  token: 01234567890123456789012345678901\n",
+		"mcp:\n  access: invalid\n", "mcp:\n  auth: invalid\n", "mcp:\n  enabled: true\n  token: short\n",
 	} {
 		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
@@ -74,6 +77,26 @@ func TestYAMLConfigRejectsInvalid(t *testing.T) {
 		if _, _, _, err := loadConfig(Options{ConfigPath: path}); err == nil {
 			t.Errorf("accepted invalid config: %q", data)
 		}
+	}
+}
+
+func TestConfigEndpointGeneratesMCPToken(t *testing.T) {
+	c, path := testFileConfig(t)
+	srv := &Server{configPath: path, savedConfig: c, effectiveConfig: c}
+	next := c
+	next.MCP.Enabled = true
+	next.MCP.Token = ""
+	data, _ := json.Marshal(next)
+	req := httptest.NewRequest(http.MethodPut, "/api/config", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.routes().ServeHTTP(w, req)
+	var view configView
+	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil || w.Code != http.StatusOK {
+		t.Fatalf("save MCP config: %d %s %v", w.Code, w.Body.String(), err)
+	}
+	if len(view.Config.MCP.Token) < 32 || view.Config.MCP.Token == c.MCP.Token {
+		t.Fatal("MCP token was not generated")
 	}
 }
 

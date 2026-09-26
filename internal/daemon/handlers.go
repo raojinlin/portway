@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sort"
 
-	"ssh-tunnel-manager/internal/store"
 	"ssh-tunnel-manager/internal/tunnel"
 )
 
@@ -16,6 +15,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("PUT /api/config", s.handleSaveConfig)
 	mux.HandleFunc("GET /api/logs", s.handleLogs)
 	mux.HandleFunc("GET /api/connections", s.handleAllConnections)
+	mux.HandleFunc("GET /api/skills/portway/download", s.handleDownloadSkill)
 
 	mux.HandleFunc("GET /api/tunnels", s.handleList)
 	mux.HandleFunc("POST /api/tunnels", s.handleCreate)
@@ -39,59 +39,12 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	if req.Name != "" && req.Name != name {
-		writeError(w, http.StatusBadRequest, "tunnel name cannot be changed")
-		return
-	}
-	req.Name = name
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	oldEntry, exists := s.state.Tunnels[name]
-	if !exists {
-		writeError(w, http.StatusNotFound, "not found")
-		return
-	}
-	// Passwords are never returned to the browser. An empty password on edit
-	// therefore means "keep the stored password" rather than erase it.
-	if req.SSHPassword == "" {
-		req.SSHPassword = oldEntry.Config.SSHPassword
-	}
-	if req.ServiceIcon == "" {
-		req.ServiceIcon = oldEntry.Config.ServiceIcon
-	}
-	cfg, err := req.toConfig()
+	v, status, err := s.updateTunnel(name, req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, status, err.Error())
 		return
 	}
-
-	previousConfig := oldEntry.Config
-	previousConfig.ServiceIcon = cfg.ServiceIcon
-	restart := oldEntry.Enabled && previousConfig != cfg
-	if restart {
-		_ = s.manager.Remove(name)
-		if err := s.manager.Add(s.tunnelContext(), cfg); err != nil {
-			_ = s.manager.Add(s.tunnelContext(), oldEntry.Config)
-			writeError(w, http.StatusInternalServerError, "restart tunnel: "+err.Error())
-			return
-		}
-	}
-
-	s.state.Tunnels[name] = store.Entry{Config: cfg, Enabled: oldEntry.Enabled}
-	if err := s.store.Save(s.state); err != nil {
-		s.state.Tunnels[name] = oldEntry
-		if restart {
-			_ = s.manager.Remove(name)
-			_ = s.manager.Add(s.tunnelContext(), oldEntry.Config)
-		}
-		writeError(w, http.StatusInternalServerError, "persist state: "+err.Error())
-		return
-	}
-
-	v, _ := s.viewLocked(name)
-	writeJSON(w, http.StatusOK, v)
+	writeJSON(w, status, v)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -193,54 +146,21 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	cfg, err := req.toConfig()
+	v, status, err := s.createTunnel(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, status, err.Error())
 		return
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.state.Tunnels[cfg.Name]; exists {
-		writeError(w, http.StatusConflict, "tunnel already exists")
-		return
-	}
-
-	if err := s.manager.Add(s.tunnelContext(), cfg); err != nil {
-		writeError(w, http.StatusInternalServerError, "start tunnel: "+err.Error())
-		return
-	}
-
-	s.state.Tunnels[cfg.Name] = store.Entry{Config: cfg, Enabled: true}
-	if err := s.store.Save(s.state); err != nil {
-		writeError(w, http.StatusInternalServerError, "persist state: "+err.Error())
-		return
-	}
-
-	v, _ := s.viewLocked(cfg.Name)
-	writeJSON(w, http.StatusCreated, v)
+	writeJSON(w, status, v)
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, exists := s.state.Tunnels[name]; !exists {
-		writeError(w, http.StatusNotFound, "not found")
+	status, err := s.deleteTunnel(r.PathValue("name"))
+	if err != nil {
+		writeError(w, status, err.Error())
 		return
 	}
-
-	_ = s.manager.Remove(name) // may already be stopped; ignore "not found"
-	delete(s.state.Tunnels, name)
-	if err := s.store.Save(s.state); err != nil {
-		writeError(w, http.StatusInternalServerError, "persist state: "+err.Error())
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(status)
 }
 
 func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {

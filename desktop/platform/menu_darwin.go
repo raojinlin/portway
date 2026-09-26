@@ -86,6 +86,18 @@ func Start(title string, actions TrayActions) error {
 						actions.Quit()
 					case 4:
 						actions.Logs()
+					case 5:
+						if actions.MCP != nil {
+							actions.MCP()
+						}
+					case 6:
+						if actions.SetMCP != nil {
+							go actions.SetMCP(true)
+						}
+					case 7:
+						if actions.SetMCP != nil {
+							go actions.SetMCP(false)
+						}
 					}
 				case action := <-tunnelEvents:
 					if actions.SetEnabled != nil {

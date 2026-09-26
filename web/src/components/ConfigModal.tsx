@@ -32,12 +32,17 @@ export default function ConfigModal({ onClose }: { onClose: () => void }) {
   }, [form, retry])
 
   async function save(values: DaemonConfig) {
+    if (!view) return
     setSaving(true)
     try {
-      const result = await api.saveConfig({ ...values, log_file: values.log_file || '' })
+      const result = await api.saveConfig({ ...values, mcp: view.config.mcp, log_file: values.log_file || '' })
       setView(result)
+      form.setFieldsValue(result.config)
       setError('')
-      message.success(result.restart_required ? tr(result.desktop ? '已保存到 YAML 文件，退出并重新打开桌面应用后生效' : '已保存到 YAML 文件，重启 daemon 后生效') : tr('配置已保存到 YAML 文件'))
+      const successText = result.restart_required
+        ? result.desktop ? tr('已保存到 YAML 文件，退出并重新打开桌面应用后生效') : tr('已保存到 YAML 文件，重启 daemon 后生效')
+        : tr('配置已保存到 YAML 文件')
+      message.success(successText)
     } catch (err) {
       setError(tr('保存失败：{error}', { error: (err as Error).message }))
     } finally {
@@ -46,7 +51,7 @@ export default function ConfigModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal open title={view?.desktop ? tr("应用配置") : tr("daemon 配置")} className="line-modal config-modal" width={720} onCancel={onClose}
+    <Modal open title={tr('系统配置')} className="line-modal config-modal" width={720} onCancel={onClose}
       maskClosable={!saving} keyboard={!saving} closable={!saving}
       footer={<><Button onClick={onClose} disabled={saving}>{tr("关闭")}</Button><Button type="primary" onClick={() => form.submit()} disabled={loading || !view} loading={saving}>{tr("保存到配置文件")}</Button></>}>
       {error && <Alert type="error" showIcon message={error} action={!view && <Button size="small" onClick={() => setRetry((n) => n + 1)}>{tr("重试")}</Button>} />}
@@ -55,7 +60,7 @@ export default function ConfigModal({ onClose }: { onClose: () => void }) {
           <p className="connection-note">{tr("配置文件：")}<code style={{ overflowWrap: 'anywhere' }}>{view.path}</code>{!view.exists && tr("（保存时创建）")}</p>
           <Alert className="config-restart-note" type={view.restart_required ? 'warning' : 'info'} showIcon
             message={view.restart_required ? tr('文件配置与当前运行配置不同') : tr(view.desktop ? '保存后退出并重新打开应用生效' : '保存后重启 daemon 生效')}
-            description={view.desktop ? tr("桌面应用直接托管后端，不开放 HTTP 端口。保存不会中断线路；macOS / Windows 关闭窗口仅隐藏，请从应用菜单或托盘菜单选择退出后再打开。") : tr("保存不会中断线路或自动重启。启动参数优先于 YAML；要使用文件中的值，请移除对应的命令行覆盖参数。手动编辑 YAML 后同样需要重启。")} />
+            description={view.desktop ? tr('这些系统配置需退出并重新打开桌面应用。macOS / Windows 关闭窗口仅隐藏，请从应用菜单或托盘菜单选择退出后再打开。') : tr('这些系统配置不会自动重载。启动参数优先于 YAML；要使用文件中的值，请移除对应的命令行覆盖参数。')} />
         </>}
         {view?.desktop && <AutostartSettings />}
         <Form form={form} layout="vertical" onFinish={save} disabled={loading || saving || !view}>
@@ -95,7 +100,7 @@ export default function ConfigModal({ onClose }: { onClose: () => void }) {
             <p className="connection-note">{tr("日志保留目标地址等访问元数据，不记录业务内容或 SSH 密码。文件权限为仅当前用户可读写。异常退出时尚未结束的连接没有完整历史记录。")}</p>
           </div>
         </Form>
-        {view && <Collapse ghost items={[{ key: 'effective', label: tr("查看当前运行配置"), children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(view.effective, null, 2)}</pre> }]} />}
+        {view && <Collapse ghost items={[{ key: 'effective', label: tr("查看当前运行配置"), children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify({ ...view.effective, mcp: undefined }, null, 2)}</pre> }]} />}
       </Spin>
     </Modal>
   )
