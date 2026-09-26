@@ -44,7 +44,7 @@ test('landing page has local assets, valid anchors, unique IDs, and no live API 
   for (const [, anchor] of html.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.includes(anchor), `missing anchor ${anchor}`)
   for (const [, asset] of html.matchAll(/(?:href|src)="\.\/([^"]+)"/g)) assert.ok(existsSync(new URL(asset, root)), `missing asset ${asset}`)
   assert.match(html, /交互预览 · 示例数据/)
-  assert.match(html, /下载需要登录 GitHub/)
+  assert.doesNotMatch(html, /github\.com|开源|下载需要登录 GitHub/)
   assert.doesNotMatch(source, /\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/)
   assert.doesNotMatch(html, /(?:src|href)="https?:\/\/.*\.(?:js|css|woff)/)
   const css = readFileSync(new URL('style.css', root), 'utf8')
@@ -122,12 +122,12 @@ test('copy emits only the documented sample command; denial exposes a manual fal
   assert.equal(denied.get('copy-proxy').disabled, false)
 })
 
-test('platform detection and manual override select the actual CI artifact names', async () => {
-  for (const [platform, expected] of [['Win32', 'portway-windows-amd64'], ['Linux x86_64', 'portway-linux-amd64']]) {
+test('platform detection and manual override select installation instructions', async () => {
+  for (const [platform, expected] of [['Win32', 'Windows'], ['Linux x86_64', 'Linux']]) {
     const h = setup({ platform })
-    assert.equal(h.get('artifact-name').textContent, expected)
+    assert.equal(h.get('os-title').textContent, expected)
     await h.systems[0].fire('click')
-    assert.equal(h.get('artifact-name').textContent, 'portway-macos-universal')
+    assert.equal(h.get('os-title').textContent, 'macOS')
     assert.equal(h.systems[0].getAttribute('aria-pressed'), 'true')
     assert.equal(h.systems.filter(node => node.getAttribute('aria-pressed') === 'true').length, 1)
   }
