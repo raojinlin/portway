@@ -38,6 +38,8 @@ jobs:
             arguments: ''
             cli_arguments: ''
     runs-on: ${{ matrix.os }}
+    env:
+      PORTWAY_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.1.0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -77,11 +79,14 @@ jobs:
       - name: Test desktop transport
         working-directory: desktop
         run: go test -tags production,webkit2_41 ./...
+      - name: Set package version
+        working-directory: desktop
+        run: node --input-type=module -e "import fs from 'node:fs'; const path = 'wails.json'; const config = JSON.parse(fs.readFileSync(path, 'utf8')); config.info.productVersion = process.env.PORTWAY_VERSION.replace(/^v/, ''); fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\\n')"
       - name: Package
         run: node scripts/desktop.mjs ${{ matrix.arguments }}
       - uses: actions/upload-artifact@v4
         with:
-          name: portway-${{ matrix.name }}
+          name: portway-${{ env.PORTWAY_VERSION }}-${{ matrix.name }}
           path: |
             dist/desktop/*
             dist/cli/*

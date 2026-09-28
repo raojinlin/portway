@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { version } from './version.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const desktop = path.join(root, 'desktop')
@@ -53,12 +54,12 @@ if (!fs.existsSync(path.join(root, 'internal/daemon/webui/dist/index.html'))) {
 fs.mkdirSync(output, { recursive: true })
 run('go', ['run', './tools/desktopicon', 'desktop/build/appicon.png'])
 const targetArch = flags.has('--universal') ? 'universal' : arch
-const args = ['build', '-s', '-skipbindings', '-m', '-nosyncgomod', '-platform', `${system}/${targetArch}`]
+const args = ['build', '-s', '-skipbindings', '-m', '-nosyncgomod', '-ldflags', `-s -w -X main.applicationVersion=${version}`, '-platform', `${system}/${targetArch}`]
 if (system === 'linux') args.push('-tags', 'webkit2_41')
 if (system === 'windows') args.push('-webview2', 'embed')
 if (flags.has('--installer')) args.push('-nsis', '-installscope', 'user')
 const bin = path.join(desktop, 'build', 'bin')
-const stem = `${executableName}-${system}-${targetArch}`
+const stem = `${executableName}-${version}-${system}-${targetArch}`
 if (system === 'darwin') {
   const bundleName = `${config.info.productName}.app`
   const app = path.join(bin, bundleName)
@@ -70,7 +71,7 @@ if (system === 'darwin') {
   try {
     const architectures = targetArch === 'universal' ? ['amd64', 'arm64'] : [arch]
     for (const architecture of architectures) {
-      run('go', ['build', '-buildvcs=false', '-tags', 'production', '-ldflags', '-s -w', '-o', path.join(stage, architecture), '.'], desktop,
+      run('go', ['build', '-buildvcs=false', '-tags', 'production', '-ldflags', `-s -w -X main.applicationVersion=${version}`, '-o', path.join(stage, architecture), '.'], desktop,
         { ...environment, CGO_ENABLED: '1', GOOS: 'darwin', GOARCH: architecture })
     }
     const executable = path.join(macos, executableName)
@@ -84,7 +85,7 @@ if (system === 'darwin') {
   const plist = fs.readFileSync(path.join(desktop, 'build/darwin/Info.plist'), 'utf8')
     .replaceAll('{{.Info.ProductName}}', xml(config.info.productName))
     .replaceAll('{{.OutputFilename}}', xml(executableName))
-    .replaceAll('{{.Info.ProductVersion}}', xml(config.info.productVersion))
+    .replaceAll('{{.Info.ProductVersion}}', xml(version))
     .replaceAll('{{.Info.Copyright}}', xml(config.info.copyright))
   fs.writeFileSync(path.join(app, 'Contents/Info.plist'), plist)
   // ICNS ic10 stores a PNG-encoded 1024px icon; macOS scales other display sizes.
@@ -132,7 +133,7 @@ if (system === 'darwin') {
     run('tar', ['-czf', path.join(output, `${stem}.tar.gz`), '-C', stage, 'usr'])
     if (spawnSync('dpkg-deb', ['--version'], { stdio: 'ignore' }).status === 0) {
       fs.mkdirSync(path.join(stage, 'DEBIAN'))
-      fs.writeFileSync(path.join(stage, 'DEBIAN/control'), `Package: ssh-tunnel-manager\nVersion: ${config.info.productVersion}\nArchitecture: ${arch}\nMaintainer: SSH Tunnel Manager\nDepends: libgtk-3-0 | libgtk-3-0t64, libwebkit2gtk-4.1-0\nSection: net\nPriority: optional\nDescription: Desktop SSH forwarding manager\n`)
+      fs.writeFileSync(path.join(stage, 'DEBIAN/control'), `Package: ssh-tunnel-manager\nVersion: ${version}\nArchitecture: ${arch}\nMaintainer: SSH Tunnel Manager\nDepends: libgtk-3-0 | libwebkit2gtk-4.1-0\nSection: net\nPriority: optional\nDescription: Desktop SSH forwarding manager\n`)
       run('dpkg-deb', ['--build', '--root-owner-group', stage, path.join(output, `${stem}.deb`)])
     } else { console.log('dpkg-deb not found; created tar.gz only') }
   } finally { fs.rmSync(stage, { recursive: true, force: true }) }

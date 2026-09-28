@@ -7,16 +7,15 @@ const read = path => readFileSync(new URL(path, root), 'utf8')
 const config = JSON.parse(read('desktop/wails.json'))
 const build = read('scripts/desktop.mjs')
 
-test('Wails executable and NSIS project names agree while display name stays Portway', () => {
+test('Wails display and executable names stay distinct and intentional', () => {
   assert.equal(config.outputfilename, 'portway')
-  // The default NSIS template installs ${INFO_PROJECTNAME}.exe, not outputfilename.
-  assert.equal(config.name, config.outputfilename)
+  assert.equal(config.name, 'Portway')
   assert.equal(config.info.productName, 'Portway')
 })
 
 test('desktop binaries and distribution names use the shared configuration', () => {
   assert.match(build, /const executableName = config\.outputfilename/)
-  assert.ok(build.includes('const stem = `${executableName}-${system}-${targetArch}`'))
+  assert.ok(build.includes('const stem = `${executableName}-${version}-${system}-${targetArch}`'))
   assert.ok(build.includes("path.join(macos, executableName)"))
   assert.ok(build.includes(".replaceAll('{{.OutputFilename}}', xml(executableName))"))
   assert.ok(build.includes('path.join(bin, `${executableName}.exe`)'))

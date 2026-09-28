@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { version } from './version.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const output = path.join(root, 'dist', 'cli')
@@ -27,7 +28,7 @@ function run(command, args, env = process.env) {
 
 function build(target, architecture) {
   run('go', [
-    'build', '-buildvcs=false', '-trimpath', '-ldflags', '-s -w',
+    'build', '-buildvcs=false', '-trimpath', '-ldflags', `-s -w -X main.version=${version}`,
     '-o', target, './cmd/tunnel',
   ], { ...process.env, CGO_ENABLED: '0', GOOS: system, GOARCH: architecture })
 }

@@ -23,7 +23,8 @@ import (
 )
 
 const applicationTitle = "Portway"
-const applicationVersion = "0.1.0"
+
+var applicationVersion = "0.1.0"
 
 type application struct {
 	mu                 sync.RWMutex

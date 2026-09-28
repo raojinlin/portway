@@ -16,7 +16,13 @@ import (
 	"ssh-tunnel-manager/internal/logging"
 )
 
+var version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println(version)
+		return
+	}
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
@@ -216,6 +222,7 @@ func stopCmd(args []string) {
 
 func usage() {
 	fmt.Println("portway <daemon|add|list|status|rm|start|stop> [flags]")
+	fmt.Println("portway --version")
 	fmt.Println()
 	fmt.Println("daemon flags:")
 	fmt.Println("  --config <path>        YAML configuration file")
