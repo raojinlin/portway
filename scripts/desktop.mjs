@@ -111,7 +111,8 @@ if (system === 'darwin') {
   run(wailsCommand(), args, desktop)
   fs.copyFileSync(path.join(bin, `${executableName}.exe`), path.join(output, `${stem}.exe`))
   if (flags.has('--installer')) {
-    const installers = fs.readdirSync(bin).filter((name) => name.startsWith(`${executableName}-`) && name.endsWith('-installer.exe'))
+    // Wails names the NSIS installer from the project name, not outputfilename.
+    const installers = fs.readdirSync(bin).filter((name) => name.startsWith(`${config.name}-`) && name.endsWith('-installer.exe'))
     if (installers.length !== 1) throw new Error(`Expected one NSIS installer, found ${installers.length}`)
     fs.copyFileSync(path.join(bin, installers[0]), path.join(output, `${stem}-installer.exe`))
   }

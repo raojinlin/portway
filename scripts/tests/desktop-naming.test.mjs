@@ -16,6 +16,7 @@ test('Wails display and executable names stay distinct and intentional', () => {
 test('desktop binaries and distribution names use the shared configuration', () => {
   assert.match(build, /const executableName = config\.outputfilename/)
   assert.ok(build.includes('const stem = `${executableName}-${version}-${system}-${targetArch}`'))
+  assert.ok(build.includes('name.startsWith(`${config.name}-`)'))
   assert.ok(build.includes("path.join(macos, executableName)"))
   assert.ok(build.includes(".replaceAll('{{.OutputFilename}}', xml(executableName))"))
   assert.ok(build.includes('path.join(bin, `${executableName}.exe`)'))
