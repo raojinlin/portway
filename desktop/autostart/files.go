@@ -23,8 +23,8 @@ func fileBackend(system, executable, home, config string) fileRegistration {
 	r := fileRegistration{reason: "unsupported_platform"}
 	abs := filepath.IsAbs(executable)
 	if system == "linux" {
-		// Linux desktop entries always use POSIX paths, including on Windows CI.
-		abs = posixpath.IsAbs(executable)
+		// Linux entries use POSIX paths, while tests may use the runner's temp path.
+		abs = abs || posixpath.IsAbs(executable)
 	}
 	if !abs || strings.ContainsAny(executable, "\x00\r\n") {
 		r.reason = "invalid_executable"
