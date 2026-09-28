@@ -1,0 +1,50 @@
+name: Deploy Site to GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['master']
+    paths:
+      - 'site/**'
+      - '.github/workflows/site-pages.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - '.github/workflows/site-pages.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Test site
+        run: node --test site/tests/*.test.mjs
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -44,7 +44,7 @@ test('landing page has local assets, valid anchors, unique IDs, and no live API 
   for (const [, anchor] of html.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.includes(anchor), `missing anchor ${anchor}`)
   for (const [, asset] of html.matchAll(/(?:href|src)="\.\/([^"]+)"/g)) assert.ok(existsSync(new URL(asset, root)), `missing asset ${asset}`)
   assert.match(html, /交互预览 · 示例数据/)
-  assert.doesNotMatch(html, /github\.com|开源|下载需要登录 GitHub/)
+  assert.match(html, /href="https:\/\/github\.com\/raojinlin\/portway"[^>]+target="_blank"[^>]+rel="noopener noreferrer"/)
   assert.doesNotMatch(source, /\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/)
   assert.doesNotMatch(html, /(?:src|href)="https?:\/\/.*\.(?:js|css|woff)/)
   const css = readFileSync(new URL('style.css', root), 'utf8')

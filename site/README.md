@@ -25,7 +25,9 @@
 
 将此目录中的 `index.html`、`style.css`、`theme.js`、`main.js` 和 `mark.svg` 原样部署到任意静态站点服务。无需构建，资源路径均为相对路径，支持部署在子目录。不需要部署本地预览服务器。
 
-公开域名确定后，可添加 canonical URL、社交分享图及 sitemap。本次不包含自动部署，不改动现有桌面和 CLI 打包流程。
+仓库中的 `.github/workflows/site-pages.yml` 会在 `master` 分支的 `site/` 变更推送后自动部署到 GitHub Pages，也可以从 Actions 页面手动运行。Pull Request 只运行页面测试，不会发布。首次启用时，在仓库 Settings → Pages → Build and deployment 中将 Source 设为 GitHub Actions。
+
+部署完成后，页面地址通常为 `https://<用户名>.github.io/<仓库名>/`。资源路径使用相对路径，因此可以直接部署在仓库子路径下；公开域名确定后，可再添加 canonical URL、社交分享图及 sitemap。
 
 ## 检查
 
