@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	posixpath "path"
 	"path/filepath"
 	"strings"
 )
@@ -20,7 +21,12 @@ type fileRegistration struct {
 
 func fileBackend(system, executable, home, config string) fileRegistration {
 	r := fileRegistration{reason: "unsupported_platform"}
-	if !filepath.IsAbs(executable) || strings.ContainsAny(executable, "\x00\r\n") {
+	abs := filepath.IsAbs(executable)
+	if system == "linux" {
+		// Linux desktop entries always use POSIX paths, including on Windows CI.
+		abs = posixpath.IsAbs(executable)
+	}
+	if !abs || strings.ContainsAny(executable, "\x00\r\n") {
 		r.reason = "invalid_executable"
 		return r
 	}
@@ -115,6 +121,10 @@ func (r fileRegistration) set(enabled bool) error {
 	}
 	defer os.Remove(f.Name())
 	if _, err = f.Write(r.content); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Chmod(0o600); err != nil {
 		f.Close()
 		return err
 	}
