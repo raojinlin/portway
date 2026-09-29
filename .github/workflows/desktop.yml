@@ -110,11 +110,11 @@ jobs:
           mkdir -p release-files
           for artifact in release-artifacts/*; do
             platform=$(basename "$artifact")
-            for file in "$artifact"/*; do
-              [ -f "$file" ] || continue
+            while IFS= read -r -d '' file; do
               cp "$file" "release-files/${platform}-$(basename "$file")"
-            done
+            done < <(find "$artifact" -type f -print0)
           done
+          find release-files -type f -print
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
