@@ -91,3 +91,38 @@ jobs:
             dist/desktop/*
             dist/cli/*
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: portway-*
+          path: release-artifacts
+      - name: Give release assets unique names
+        shell: bash
+        run: |
+          mkdir -p release-files
+          for artifact in release-artifacts/*; do
+            platform=$(basename "$artifact")
+            for file in "$artifact"/*; do
+              [ -f "$file" ] || continue
+              cp "$file" "release-files/${platform}-$(basename "$file")"
+            done
+          done
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-files/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-files/* \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
