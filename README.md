@@ -1,6 +1,6 @@
 # Portway
 
-管理 SSH 隧道的桌面应用与命令行工具。支持本地转发、远程转发和 SOCKS5 代理，可集中管理多条线路、查看流量与连接、排查运行日志，并在启动时恢复已启用的线路。
+管理 SSH 隧道的桌面应用与命令行工具。支持本地转发、远程转发，以及可同时监听 SOCKS5 和 HTTP 的动态代理，可集中管理多条线路、查看流量与连接、排查运行日志，并在启动时恢复已启用的线路。
 
 桌面版支持 macOS、Windows 和 Linux；也可以只运行一个内嵌 Web 界面的 daemon，通过浏览器或 CLI 管理。普通 SSH 连接和 `ProxyJump` 由 Go 原生实现，不需要安装系统 `ssh` 命令。
 
@@ -96,7 +96,7 @@ claude mcp add --transport http --scope user portway 'http://127.0.0.1:7778/mcp'
 
 `mcp add` 会立即启动 OAuth；服务器已经存在时使用 `codex mcp login portway --oauth-client-registration dcr`。OAuth 登录会打开 Portway 授权页；用户在该页面输入配置中的 OAuth 授权码并确认，授权码不会交给 Agent。Portway 提供 RFC 9728 受保护资源元数据和 RFC 8414 授权服务器元数据。MCP 请求默认不允许浏览器 Origin，未授权的工具不会出现在 Agent 的工具列表中。
 
-所有 MCP 工具调用都会写入审计日志：成功调用使用 `info`，失败和认证拒绝使用 `warn`，`initialize`、`tools/list` 等协议请求及 HTTP 状态使用 `debug`。日志只包含方法或工具名、可安全识别的线路名、结果和耗时，不记录参数正文、Bearer Token 或 SSH 凭据。需要查看完整协议请求轨迹时，将运行日志级别设为 `debug`。
+所有 MCP 工具调用都会写入审计日志：成功调用使用 `info`，失败和认证拒绝使用 `warn`，`initialize`、`tools/list` 等协议请求及 HTTP 状态使用 `debug`。日志以结构化字段记录工具名、传入的非敏感参数、线路名、结果和耗时；搜索词、密钥及配置路径会脱敏，不记录未知参数、Bearer Token 或 SSH 密码。需要查看完整协议请求轨迹时，将运行日志级别设为 `debug`。
 
 “下载 Skill”会取得 `portway-skill.zip`；桌面版先弹出系统保存对话框，浏览器版使用浏览器下载，用户可自行解压到 Agent 的技能目录。Skill 也可通过 `http://<MCP 监听地址>/skills/portway.zip` 下载；MCP 设置会生成可直接复制给 Agent 的一句话安装指令。已经连接 MCP 的 Agent 还可调用 `get_portway_skill`，取得同一份 `SKILL.md`、Agent 元数据和 SHA-256 校验值，再按自身运行环境安装；Portway 不会替远端 Agent 写入文件系统。
 
@@ -108,7 +108,7 @@ claude mcp add --transport http --scope user portway 'http://127.0.0.1:7778/mcp'
 | --- | --- | --- | --- |
 | 本地转发 `local`（`ssh -L`） | 运行 Portway 的机器 | SSH 服务器 | 访问远端数据库、内网服务 |
 | 远程转发 `remote`（`ssh -R`） | SSH 服务器 | 运行 Portway 的机器 | 将本地服务提供给远端访问 |
-| SOCKS5 `dynamic`（`ssh -D`） | 运行 Portway 的机器 | SSH 服务器；目标由请求指定 | 按需代理多个目标 |
+| 动态代理 `dynamic`（SOCKS5 类似 `ssh -D`，可选 HTTP） | 运行 Portway 的机器 | SSH 服务器；目标由请求指定 | 按需代理多个目标 |
 
 ```bash
 # 本地转发：本机 15432 → SSH 服务器可达的数据库
@@ -119,14 +119,18 @@ claude mcp add --transport http --scope user portway 'http://127.0.0.1:7778/mcp'
 ./portway add --name preview --direction remote --ssh my-server \
   --remote-listen 127.0.0.1:9000 --forward 127.0.0.1:3000
 
-# SOCKS5：在本机 1080 提供代理，无需固定目标
+# 动态代理：SOCKS5 使用 1080，可选的 HTTP 代理使用 8080；无需固定目标
 ./portway add --name proxy --direction dynamic --ssh my-server \
-  --local 127.0.0.1:1080
+  --local 127.0.0.1:1080 --http-listen 127.0.0.1:8080
 ```
 
 远程监听是否允许外部访问，还取决于 SSH 服务器的转发策略和 `GatewayPorts` 配置。绑定 `0.0.0.0` 前，请确认暴露范围和防火墙规则。
 
-SOCKS5 支持无认证的 TCP CONNECT，不支持 UDP 转发，建议仅监听回环地址。页面可复制 `socks5h://` 地址或代理命令，同时设置 `all_proxy`、`http_proxy`、`https_proxy`。命令只影响当前终端中支持这些变量及 SOCKS5 的程序，不会设置系统代理。复制结果默认用于运行 Portway 的机器，远程浏览器用户需自行确认地址是否可达。
+SOCKS5 支持无认证的 TCP CONNECT，不支持 UDP 转发，建议仅监听回环地址。页面可复制代理地址或命令，同时设置 `all_proxy`、`http_proxy`、`https_proxy`：配置 HTTP 监听时使用 `http://`，否则使用 `socks5h://`。命令只影响当前终端中支持相应代理协议的程序，不会设置系统代理。复制结果默认用于运行 Portway 的机器，远程浏览器用户需自行确认地址是否可达。
+
+`--http-listen` 可选。设置后，同一条动态代理线路还会开放无认证的 HTTP 代理，支持 HTTP CONNECT（包括 HTTPS）和普通 HTTP 请求；SOCKS5 端口继续可用。例如 `curl --proxy http://127.0.0.1:8080 https://example.com`，或 `curl --socks5-hostname 127.0.0.1:1080 https://example.com`。HTTP 代理也建议只监听回环地址。
+
+动态代理可用 `--local auto --http-listen auto` 自动选择端口。SOCKS5 从 1080、HTTP 从 10800 起依次尝试空闲端口，绑定在 `127.0.0.1`；实际端口在线路详情和复制代理命令中显示。留空 `--http-listen` 则不开启 HTTP 代理。
 
 ## SSH 认证与安全
 

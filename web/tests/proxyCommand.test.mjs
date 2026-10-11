@@ -22,8 +22,17 @@ test('SOCKS URLs use proxy-side DNS, preserve IPv6 and normalize wildcard listen
 
 test('invalid listeners and shell injection cannot produce a command', () => {
   for (const listen of ['', 'localhost', 'localhost:0', 'localhost:65536', '::1:1080', "host'; touch /tmp/pwn;':1080", '$(whoami):1080', 'host:1080/path', 'user@host:1080']) {
-    assert.throws(() => setup().proxyURL(listen), /Invalid SOCKS5/)
+    assert.throws(() => setup().proxyURL(listen), /Invalid proxy/)
   }
+})
+
+test('HTTP proxy URLs use the HTTP scheme with the same safe listener normalization', () => {
+  const { proxyURL, preferredProxyURL, proxyCommand } = setup()
+  const url = proxyURL('0.0.0.0:8080', 'http')
+  assert.equal(url, 'http://127.0.0.1:8080')
+  assert.equal(preferredProxyURL('127.0.0.1:1080', '0.0.0.0:8080'), url)
+  assert.equal(preferredProxyURL('127.0.0.1:1080', ''), 'socks5h://127.0.0.1:1080')
+  assert.equal(proxyCommand(url, 'posix'), "export all_proxy='http://127.0.0.1:8080' http_proxy='http://127.0.0.1:8080' https_proxy='http://127.0.0.1:8080'")
 })
 
 test('generates POSIX, PowerShell and URL commands without executing anything', () => {

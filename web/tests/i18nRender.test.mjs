@@ -126,7 +126,7 @@ test('activity page renders translated log filters, file warnings and escaped me
   for (const language of ['zh', 'en']) {
     const html = ui(language, snapshot)('components/ActivityPage.tsx', { tunnels: [], onConfigClick() {} })
     assert.ok(html.includes(language === 'en' ? 'Runtime logs' : '运行日志'))
-    assert.ok(html.includes(language === 'en' ? 'SOCKS5 history' : 'SOCKS5 历史'))
+    assert.ok(html.includes(language === 'en' ? 'Proxy history' : '动态代理历史'))
     assert.ok(html.includes('/logs/daemon.log'))
     assert.ok(html.includes('&lt;script&gt;bad()&lt;/script&gt;'))
     assert.ok(!html.includes('<script>bad()</script>'))

@@ -149,7 +149,8 @@ type mcpTunnelInput struct {
 	Name                     string `json:"name" jsonschema:"Unique tunnel name"`
 	ServiceIcon              string `json:"service_icon,omitempty" jsonschema:"Built-in service icon ID or auto"`
 	Direction                string `json:"direction,omitempty" jsonschema:"Forwarding direction: local, remote, or dynamic; defaults to local"`
-	LocalListen              string `json:"local_listen,omitempty" jsonschema:"Local listen address for local and dynamic forwarding"`
+	LocalListen              string `json:"local_listen,omitempty" jsonschema:"Local listen address; dynamic accepts auto to select first free port from 1080"`
+	HTTPListen               string `json:"http_listen,omitempty" jsonschema:"Optional HTTP proxy listen address; dynamic accepts auto to select first free port from 10800"`
 	SSHAddress               string `json:"ssh_address" jsonschema:"SSH host:port or SSH config Host alias"`
 	SSHUser                  string `json:"ssh_user,omitempty" jsonschema:"Optional SSH user; prefer SSH config"`
 	SSHKeyPath               string `json:"ssh_key_path,omitempty" jsonschema:"Optional private key path on the Portway host"`
@@ -165,7 +166,7 @@ type mcpTunnelInput struct {
 
 func (in mcpTunnelInput) request() TunnelRequest {
 	return TunnelRequest{
-		Name: in.Name, ServiceIcon: in.ServiceIcon, Direction: in.Direction, LocalListen: in.LocalListen,
+		Name: in.Name, ServiceIcon: in.ServiceIcon, Direction: in.Direction, LocalListen: in.LocalListen, HTTPListen: in.HTTPListen,
 		SSHAddress: in.SSHAddress, SSHUser: in.SSHUser, SSHKeyPath: in.SSHKeyPath, SSHConfigPath: in.SSHConfigPath,
 		RemoteListen: in.RemoteListen, ForwardAddress: in.ForwardAddress, KnownHostsPath: in.KnownHostsPath,
 		TrustNewHostKey: in.TrustNewHostKey, InsecureSkipHostKeyCheck: in.InsecureSkipHostKeyCheck,
@@ -246,7 +247,7 @@ func buildMCPServer(owner *Server, config MCPConfig, logger *slog.Logger) *mcp.S
 			})
 	}
 	addConnectionsTool("list_active_connections", "List active Portway forwarding connections, optionally filtered by tunnel, state, or text.", false)
-	addConnectionsTool("list_connection_history", "List completed SOCKS5 connection history, optionally filtered by tunnel, state, or text.", true)
+	addConnectionsTool("list_connection_history", "List completed dynamic proxy connection history, optionally filtered by tunnel, state, or text.", true)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "search_runtime_logs", Description: "Search Portway runtime logs without exposing SSH passwords.",
 		Annotations: annotations("Search runtime logs", true, false, true)},
@@ -352,21 +353,23 @@ func mcpAuditMiddleware(logger *slog.Logger) mcp.Middleware {
 				return result, err
 			}
 
-			tool, tunnel := mcpAuditTarget(request)
-			fields := []any{"tool", tool, "result", "success", "elapsed", elapsed}
-			if tunnel != "" {
-				fields = append(fields, "tunnel", tunnel)
-			}
+			tool, tunnel, arguments := mcpAuditTarget(request)
 			toolErr := err
 			if toolErr == nil {
 				if callResult, ok := result.(*mcp.CallToolResult); ok {
 					toolErr = callResult.GetError()
 				}
 			}
+			outcome := "success"
 			if toolErr != nil {
-				fields[3] = "error"
-				fields = append(fields, "error", toolErr)
-				logger.WarnContext(ctx, "MCP tool call failed", fields...)
+				outcome = "error"
+			}
+			fields := []any{"tool", tool, "arguments", arguments, "result", outcome, "elapsed", elapsed}
+			if tunnel != "" {
+				fields = append(fields, "tunnel", tunnel)
+			}
+			if toolErr != nil {
+				logger.WarnContext(ctx, "MCP tool call failed", append(fields, "error", toolErr)...)
 			} else {
 				logger.InfoContext(ctx, "MCP tool call", fields...)
 			}
@@ -375,24 +378,69 @@ func mcpAuditMiddleware(logger *slog.Logger) mcp.Middleware {
 	}
 }
 
-func mcpAuditTarget(request mcp.Request) (tool, tunnel string) {
+// MCP audit fields are explicit so unknown or newly added tool arguments cannot
+// accidentally expose tokens, passwords, or arbitrary request bodies.
+var mcpAuditFields = map[string][]string{
+	"list_tunnels":            {"state", "direction"},
+	"get_tunnel":              {"name"},
+	"list_active_connections": {"tunnel", "state", "limit"},
+	"list_connection_history": {"tunnel", "state", "limit"},
+	"search_runtime_logs":     {"tunnel", "level", "limit"},
+	"start_tunnel":            {"name"},
+	"stop_tunnel":             {"name"},
+	"delete_tunnel":           {"name"},
+	"create_tunnel": {"name", "service_icon", "direction", "local_listen", "http_listen",
+		"ssh_address", "ssh_user", "remote_listen", "forward_address", "trust_new_host_key",
+		"insecure_skip_host_key_check", "keep_alive", "reconnect_delay"},
+	"update_tunnel": {"name", "service_icon", "direction", "local_listen", "http_listen",
+		"ssh_address", "ssh_user", "remote_listen", "forward_address", "trust_new_host_key",
+		"insecure_skip_host_key_check", "keep_alive", "reconnect_delay"},
+}
+
+func mcpAuditTarget(request mcp.Request) (tool, tunnel string, arguments map[string]any) {
+	arguments = make(map[string]any)
 	params, ok := request.GetParams().(*mcp.CallToolParamsRaw)
 	if !ok || params == nil {
-		return "", ""
+		return "", "", arguments
 	}
 	tool = params.Name
-	var selector struct {
-		Name   string `json:"name"`
-		Tunnel string `json:"tunnel"`
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(params.Arguments, &raw); err != nil {
+		return tool, "", arguments
 	}
-	if err := json.Unmarshal(params.Arguments, &selector); err == nil {
-		if selector.Name != "" {
-			tunnel = selector.Name
-		} else {
-			tunnel = selector.Tunnel
+	for _, key := range mcpAuditFields[tool] {
+		value, exists := raw[key]
+		if !exists {
+			continue
+		}
+		var decoded any
+		if err := json.Unmarshal(value, &decoded); err != nil {
+			continue
+		}
+		switch v := decoded.(type) {
+		case string:
+			if len(v) > 256 {
+				v = v[:256] + "..."
+			}
+			arguments[key] = v
+		case bool, float64, nil:
+			arguments[key] = v
+		default:
+			arguments[key] = "[invalid]"
 		}
 	}
-	return tool, tunnel
+	// Search text and configuration paths can contain credentials or private data.
+	for _, key := range []string{"query", "ssh_key_path", "ssh_config_path", "known_hosts_path"} {
+		if _, exists := raw[key]; exists {
+			arguments[key] = "[REDACTED]"
+		}
+	}
+	if name, ok := arguments["name"].(string); ok {
+		tunnel = name
+	} else if name, ok := arguments["tunnel"].(string); ok {
+		tunnel = name
+	}
+	return tool, tunnel, arguments
 }
 
 func authorizeMCP(w http.ResponseWriter, request *http.Request, authMode, token string, oauthServer *mcpOAuthServer) (bool, string) {

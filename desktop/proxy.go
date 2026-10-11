@@ -10,7 +10,11 @@ import (
 
 var proxyHost = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
-func trayProxy(listen string) (string, string) {
+func trayProxy(socksListen, httpListen string) (string, string) {
+	listen, scheme := socksListen, "socks5h"
+	if httpListen != "" {
+		listen, scheme = httpListen, "http"
+	}
 	host, portText, err := net.SplitHostPort(strings.TrimSpace(listen))
 	if err != nil {
 		return "", ""
@@ -28,7 +32,7 @@ func trayProxy(listen string) (string, string) {
 	if net.ParseIP(host) == nil && !proxyHost.MatchString(host) {
 		return "", ""
 	}
-	url := "socks5h://" + net.JoinHostPort(host, strconv.Itoa(port))
+	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
 	if runtime.GOOS == "windows" {
 		return url, "$env:all_proxy='" + url + "'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy"
 	}

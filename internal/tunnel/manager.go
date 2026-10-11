@@ -77,7 +77,7 @@ func (m *Manager) Connections(name string) []Connection {
 	return []Connection{}
 }
 
-// ConnectionHistory returns this instance's completed SOCKS5 requests.
+// ConnectionHistory returns this instance's completed dynamic proxy requests.
 func (m *Manager) ConnectionHistory(name string) []ConnectionHistoryEntry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

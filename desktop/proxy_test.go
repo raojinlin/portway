@@ -14,7 +14,7 @@ func TestTrayProxyCommands(t *testing.T) {
 		"127.0.0.1:1080": "socks5h://127.0.0.1:1080", "0.0.0.0:1080": "socks5h://127.0.0.1:1080",
 		":1080": "socks5h://127.0.0.1:1080", "[::]:1080": "socks5h://[::1]:1080", "proxy.local:8080": "socks5h://proxy.local:8080",
 	} {
-		url, command := trayProxy(listen)
+		url, command := trayProxy(listen, "")
 		wantCommand := "export all_proxy='" + want + "' http_proxy='" + want + "' https_proxy='" + want + "'"
 		if runtime.GOOS == "windows" {
 			wantCommand = "$env:all_proxy='" + want + "'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy"
@@ -24,9 +24,18 @@ func TestTrayProxyCommands(t *testing.T) {
 		}
 	}
 	for _, listen := range []string{"", "localhost", "host:0", "host:65536", "$(whoami):1080", "foo';echo x:1080"} {
-		if url, command := trayProxy(listen); url != "" || command != "" {
+		if url, command := trayProxy(listen, ""); url != "" || command != "" {
 			t.Fatalf("unsafe proxy command: %s", command)
 		}
+	}
+	url, command := trayProxy("127.0.0.1:1080", "0.0.0.0:8080")
+	wantURL := "http://127.0.0.1:8080"
+	wantCommand := "export all_proxy='" + wantURL + "' http_proxy='" + wantURL + "' https_proxy='" + wantURL + "'"
+	if runtime.GOOS == "windows" {
+		wantCommand = "$env:all_proxy='" + wantURL + "'; $env:http_proxy=$env:all_proxy; $env:https_proxy=$env:all_proxy"
+	}
+	if url != wantURL || command != wantCommand {
+		t.Fatalf("HTTP proxy command = %q %q", url, command)
 	}
 }
 

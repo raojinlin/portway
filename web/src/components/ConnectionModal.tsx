@@ -16,7 +16,7 @@ function duration(seconds: number, tr: Translate): string {
 
 export const connectionColumns = <T extends TunnelConnection = TunnelConnection,>(tr: Translate, locale: string): TableColumnsType<T> => [
   { title: tr("来源地址"), dataIndex: 'source', width: 210, fixed: 'left', render: (value: string) => <span className="connection-address">{value}</span> },
-  { title: tr("目标地址"), dataIndex: 'target', width: 210, render: (value: string, row) => <span className="connection-address">{value || (row.ended_at ? tr("未取得目标地址") : tr("等待 SOCKS5 请求"))}</span> },
+  { title: tr("目标地址"), dataIndex: 'target', width: 210, render: (value: string, row) => <span className="connection-address">{value || (row.ended_at ? tr("未取得目标地址") : tr("等待代理请求"))}</span> },
   { title: tr("状态"), dataIndex: 'state', width: 105, render: (value: TunnelConnection['state']) => <span className={`connection-state connection-state--${value}`}>{{ connected: tr("已连接"), connecting: tr("连接中"), closed: tr("已结束"), failed: tr("失败") }[value]}</span> },
   { title: tr("接入时间"), dataIndex: 'started_at', width: 180, render: (value: string) => new Date(value).toLocaleString(locale, { hour12: false }) },
   { title: <Tooltip title={tr("从接受客户端连接开始计时，包含等待目标连接的时间。")}>{tr("已持续")}</Tooltip>, dataIndex: 'age_seconds', width: 140, render: (seconds: number) => duration(seconds, tr) },
@@ -89,9 +89,9 @@ function ConnectionTable({ name, history, showHistory }: { name: string; history
       {persistenceError && <Alert type="error" showIcon message={tr("部分连接历史未能写入日志")} description={tr('{error}。当前仍显示内存记录，请检查磁盘空间与文件权限；未写入的记录重启后会丢失。', { error: persistenceError })} />}
       <Table<TunnelConnection> size="small" columns={history ? historyColumns(tr, locale) : connectionColumns(tr, locale)} dataSource={rows} rowKey={(row) => `${row.started_at}-${row.id}`}
         loading={loading} scroll={{ x: history ? 1655 : 1175 }} pagination={{ current: page, onChange: setPage, pageSize: 20, showSizeChanger: false, hideOnSinglePage: true }}
-        locale={{ emptyText: error ? tr("暂时无法获取连接信息") : loading ? tr("正在加载…") : history ? tr("暂无历史连接，SOCKS5 请求结束后会显示在这里") : tr("暂无活动连接") }} />
+        locale={{ emptyText: error ? tr("暂时无法获取连接信息") : loading ? tr("正在加载…") : history ? tr("暂无历史连接，动态代理请求结束后会显示在这里") : tr("暂无活动连接") }} />
       <p className="connection-note">{history ? <>
-        {tr('展示最近已结束的 SOCKS5 请求（最多 {limit} 条），最新记录在前。', { limit: limit ?? '—' })}
+        {tr('展示最近已结束的动态代理请求（最多 {limit} 条），最新记录在前。', { limit: limit ?? '—' })}
         {tr(persisted ? '连接记录追加到日志文件，停止或重启线路不会清空；重启 daemon 后从保留的日志恢复。日志路径及轮转策略可在页面配置中修改。' : '当前未启用日志持久化，记录仅在本次线路运行期间保留。')}
         {tr('失败仅代表该请求失败，不代表线路异常。')}
       </> : tr(showHistory ? '仅展示当前转发连接，断开后移入历史连接，不包含 SSH 控制连接。' : '仅展示当前转发连接，断开后自动移除，不包含 SSH 控制连接。')}

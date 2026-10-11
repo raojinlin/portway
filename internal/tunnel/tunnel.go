@@ -41,6 +41,7 @@ type Config struct {
 	Name           string
 	Direction      Direction // local (default) | remote | dynamic
 	LocalListen    string    // local bind address; used by local and dynamic
+	HTTPListen     string    // optional HTTP proxy bind address; dynamic only
 	SSHAddress     string    // e.g. host:22 (may be logical host from ssh config)
 	SSHUser        string
 	SSHKeyPath     string // path to private key (PEM)
@@ -84,6 +85,9 @@ func ValidateConfig(cfg Config) error {
 		if cfg.LocalListen == "" || cfg.SSHAddress == "" {
 			return errors.New("local listen and ssh address are required for dynamic forwarding")
 		}
+		if cfg.HTTPListen != "" && cfg.HTTPListen != "auto" && cfg.HTTPListen == cfg.LocalListen {
+			return errors.New("http listen must differ from socks5 listen")
+		}
 	case DirectionLocal:
 		if cfg.LocalListen == "" || cfg.SSHAddress == "" || cfg.ForwardAddress == "" {
 			return errors.New("local listen, ssh address, and forward address are required")
@@ -91,18 +95,23 @@ func ValidateConfig(cfg Config) error {
 	default:
 		return fmt.Errorf("unknown direction %q", cfg.Direction)
 	}
+	if cfg.direction() != DirectionDynamic && cfg.HTTPListen != "" {
+		return errors.New("http listen is only supported for dynamic forwarding")
+	}
 	return nil
 }
 
 // Status captures runtime stats for a tunnel.
 type Status struct {
-	Name        string
-	State       string // starting, running, stopping, stopped, error
-	LastError   string
-	BytesIn     int64 // payload received by this host during this instance's lifetime
-	BytesOut    int64 // payload sent by this host during this instance's lifetime
-	ActiveConns int32 // accepted forwarding connections, including target dialing
-	StartedAt   time.Time
+	Name               string
+	State              string // starting, running, stopping, stopped, error
+	LastError          string
+	BytesIn            int64 // payload received by this host during this instance's lifetime
+	BytesOut           int64 // payload sent by this host during this instance's lifetime
+	ActiveConns        int32 // accepted forwarding connections, including target dialing
+	StartedAt          time.Time
+	LocalListenAddress string `json:"-"` // actual bound address for an auto SOCKS5 listener
+	HTTPListenAddress  string `json:"-"` // actual bound address for an auto HTTP listener
 }
 
 // Instance represents a running tunnel.
@@ -179,7 +188,7 @@ func (i *Instance) setStatus(s Status) {
 func (i *Instance) run(ctx context.Context) {
 	defer close(i.done)
 	logger := logging.FromContext(ctx).With("tunnel", i.cfg.Name, "direction", i.cfg.direction())
-	logger.Info("tunnel starting", "ssh", i.cfg.SSHAddress, "local_listen", i.cfg.LocalListen, "remote_listen", i.cfg.RemoteListen, "target", i.cfg.ForwardAddress)
+	logger.Info("tunnel starting", "ssh", i.cfg.SSHAddress, "local_listen", i.cfg.LocalListen, "http_listen", i.cfg.HTTPListen, "remote_listen", i.cfg.RemoteListen, "target", i.cfg.ForwardAddress)
 	defer func() {
 		status := i.Status()
 		logger.Info("tunnel stopped", "bytes_in", status.BytesIn, "bytes_out", status.BytesOut, "uptime", time.Since(status.StartedAt))
@@ -244,43 +253,73 @@ func (i *Instance) connectAndServe(ctx context.Context) error {
 	i.mu.Lock()
 	i.listener = ln
 	i.mu.Unlock()
+	listeners := []listenerDial{{ln, dial}}
+	var httpAddress string
+	if i.cfg.direction() == DirectionDynamic && i.cfg.HTTPListen != "" {
+		httpLn, listenErr := listenProxy(i.cfg.HTTPListen, 10800)
+		if listenErr != nil {
+			ln.Close()
+			client.Close()
+			return fmt.Errorf("http proxy listen %s: %w", i.cfg.HTTPListen, listenErr)
+		}
+		listeners = append(listeners, listenerDial{httpLn, func(src net.Conn, setTarget func(string)) (net.Conn, error) {
+			return i.dialHTTPTarget(client.Dial, src, setTarget)
+		}})
+		httpAddress = httpLn.Addr().String()
+	}
 
 	i.setStatus(Status{
-		Name:      i.cfg.Name,
-		State:     "running",
-		StartedAt: i.Status().StartedAt,
+		Name:               i.cfg.Name,
+		State:              "running",
+		StartedAt:          i.Status().StartedAt,
+		LocalListenAddress: ln.Addr().String(),
+		HTTPListenAddress:  httpAddress,
 	})
-	logging.FromContext(ctx).Info("tunnel listening", "tunnel", i.cfg.Name, "direction", i.cfg.direction(), "listen", ln.Addr().String())
+	logging.FromContext(ctx).Info("tunnel listening", "tunnel", i.cfg.Name, "direction", i.cfg.direction(), "listen", ln.Addr().String(), "http_listen", httpAddress)
 
-	return i.serveConnections(ctx, ln, dial, func() { cancel(); client.Close() })
+	return i.serveListeners(ctx, listeners, func() { cancel(); client.Close() })
+}
+
+type listenerDial struct {
+	listener net.Listener
+	dial     dstDialer
 }
 
 // Drain connection finalizers before Stop returns, so the daemon can safely close its history log.
 func (i *Instance) serveConnections(ctx context.Context, ln net.Listener, dial dstDialer, closeTransport func()) error {
+	return i.serveListeners(ctx, []listenerDial{{ln, dial}}, closeTransport)
+}
+
+func (i *Instance) serveListeners(ctx context.Context, listeners []listenerDial, closeTransport func()) error {
 	ctx, cancel := context.WithCancel(ctx)
-	errCh := make(chan error, 1)
-	acceptDone := make(chan struct{})
+	errCh := make(chan error, len(listeners))
 	var connections sync.WaitGroup
-	go func() {
-		defer close(acceptDone)
-		for {
-			conn, aErr := ln.Accept()
-			if aErr != nil {
-				errCh <- aErr
-				return
+	var accepts sync.WaitGroup
+	for _, item := range listeners {
+		accepts.Add(1)
+		go func() {
+			defer accepts.Done()
+			for {
+				conn, aErr := item.listener.Accept()
+				if aErr != nil {
+					errCh <- aErr
+					return
+				}
+				connections.Add(1)
+				go func() {
+					defer connections.Done()
+					i.handleConn(ctx, conn, item.dial)
+				}()
 			}
-			connections.Add(1)
-			go func() {
-				defer connections.Done()
-				i.handleConn(ctx, conn, dial)
-			}()
-		}
-	}()
+		}()
+	}
 	defer func() {
 		cancel()
-		ln.Close()
+		for _, item := range listeners {
+			item.listener.Close()
+		}
 		closeTransport()
-		<-acceptDone
+		accepts.Wait()
 		connections.Wait()
 	}()
 
@@ -308,7 +347,7 @@ func (i *Instance) setupDirection(ctx context.Context, client *ssh.Client) (net.
 			return (&net.Dialer{}).DialContext(ctx, "tcp", i.cfg.ForwardAddress)
 		}, nil
 	case DirectionDynamic:
-		ln, err := net.Listen("tcp", i.cfg.LocalListen)
+		ln, err := listenProxy(i.cfg.LocalListen, 1080)
 		if err != nil {
 			return nil, nil, fmt.Errorf("listen %s: %w", i.cfg.LocalListen, err)
 		}

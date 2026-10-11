@@ -62,9 +62,12 @@ func (s *traySampler) sample(views []daemon.TunnelView, now time.Time) platform.
 			line.Details = append(line.Details, tr("远程监听：", "Remote: ")+view.RemoteListen, tr("SSH 服务：", "SSH server: ")+view.SSHAddress, tr("本机目标：", "Local target: ")+view.ForwardAddress)
 		case "dynamic":
 			if state != "stopped" {
-				line.ProxyURL, line.ProxyCommand = trayProxy(view.LocalListen)
+				line.ProxyURL, line.ProxyCommand = trayProxy(view.LocalListen, view.HTTPListen)
 			}
 			line.Details = append(line.Details, tr("SOCKS5 监听：", "SOCKS5: ")+view.LocalListen, tr("SSH 跳板：", "SSH gateway: ")+view.SSHAddress, tr("目标：由客户端指定", "Target: Specified by client"))
+			if view.HTTPListen != "" {
+				line.Details = append(line.Details, tr("HTTP 代理监听：", "HTTP proxy: ")+view.HTTPListen)
+			}
 		default:
 			line.Details = append(line.Details, tr("本地监听：", "Local: ")+view.LocalListen, tr("SSH 跳板：", "SSH gateway: ")+view.SSHAddress, tr("目标服务：", "Target: ")+view.ForwardAddress)
 		}

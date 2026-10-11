@@ -15,6 +15,7 @@ type TunnelRequest struct {
 	Name                     string `json:"name"`
 	Direction                string `json:"direction,omitempty"` // "local" (default), "remote", or "dynamic"
 	LocalListen              string `json:"local_listen,omitempty"`
+	HTTPListen               string `json:"http_listen,omitempty"`
 	SSHAddress               string `json:"ssh_address"`
 	SSHUser                  string `json:"ssh_user,omitempty"`
 	SSHKeyPath               string `json:"ssh_key_path,omitempty"`
@@ -70,6 +71,7 @@ func (r TunnelRequest) toConfig() (tunnel.Config, error) {
 		Name:                     r.Name,
 		Direction:                direction,
 		LocalListen:              r.LocalListen,
+		HTTPListen:               r.HTTPListen,
 		SSHAddress:               r.SSHAddress,
 		SSHUser:                  r.SSHUser,
 		SSHKeyPath:               r.SSHKeyPath,
@@ -98,6 +100,9 @@ type TunnelView struct {
 	Enabled                  bool   `json:"enabled"`
 	Direction                string `json:"direction"`
 	LocalListen              string `json:"local_listen"`
+	HTTPListen               string `json:"http_listen"`
+	ConfiguredLocalListen    string `json:"configured_local_listen"`
+	ConfiguredHTTPListen     string `json:"configured_http_listen"`
 	SSHAddress               string `json:"ssh_address"`
 	SSHUser                  string `json:"ssh_user"`
 	SSHKeyPath               string `json:"ssh_key_path"`
@@ -116,13 +121,25 @@ func newTunnelView(cfg tunnel.Config, enabled bool, status tunnel.Status) Tunnel
 	if direction == "" {
 		direction = tunnel.DirectionLocal
 	}
+	localListen, httpListen := cfg.LocalListen, cfg.HTTPListen
+	if status.State == "running" && direction != tunnel.DirectionRemote {
+		if status.LocalListenAddress != "" {
+			localListen = status.LocalListenAddress
+		}
+		if status.HTTPListenAddress != "" {
+			httpListen = status.HTTPListenAddress
+		}
+	}
 	return TunnelView{
 		ServiceIcon:              cfg.ServiceIcon,
 		ResolvedServiceIcon:      cfg.ResolvedServiceIcon(),
 		Status:                   status,
 		Enabled:                  enabled,
 		Direction:                string(direction),
-		LocalListen:              cfg.LocalListen,
+		LocalListen:              localListen,
+		HTTPListen:               httpListen,
+		ConfiguredLocalListen:    cfg.LocalListen,
+		ConfiguredHTTPListen:     cfg.HTTPListen,
 		SSHAddress:               cfg.SSHAddress,
 		SSHUser:                  cfg.SSHUser,
 		SSHKeyPath:               cfg.SSHKeyPath,

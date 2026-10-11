@@ -26,7 +26,7 @@ type Connection struct {
 	BytesOut   int64     `json:"bytes_out"`
 }
 
-// ConnectionHistoryLimit bounds the recent SOCKS5 history shown by the API.
+// ConnectionHistoryLimit bounds the recent dynamic proxy history shown by the API.
 const ConnectionHistoryLimit = 500
 
 type historyRecorderKey struct{}
@@ -134,7 +134,7 @@ func (i *Instance) trackConnection(src net.Conn) (*liveConnection, func()) {
 	}
 }
 
-// ConnectionHistory returns newest-first, detached snapshots of completed SOCKS5 requests.
+// ConnectionHistory returns newest-first, detached snapshots of completed dynamic proxy requests.
 func (i *Instance) ConnectionHistory() []ConnectionHistoryEntry {
 	i.connectionsMu.RLock()
 	defer i.connectionsMu.RUnlock()
