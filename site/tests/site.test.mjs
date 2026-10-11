@@ -5,10 +5,12 @@ import { runInNewContext } from 'node:vm'
 
 const root = new URL('../', import.meta.url)
 const html = readFileSync(new URL('index.html', root), 'utf8')
+const englishHtml = readFileSync(new URL('en.html', root), 'utf8')
 const source = readFileSync(new URL('main.js', root), 'utf8')
 
 // Small DOM adapter exercises event behavior without a daemon, network, or browser dependencies.
-function setup({ platform = 'MacIntel', clipboard = async () => {} } = {}) {
+function setup({ platform = 'MacIntel', clipboard = async () => {}, language = 'zh-CN' } = {}) {
+  const page = language === 'en' ? englishHtml : html
   const ids = new Map()
   function element(id, dataset = {}) {
     const attributes = new Map(), listeners = new Map(), classes = new Set()
@@ -25,13 +27,14 @@ function setup({ platform = 'MacIntel', clipboard = async () => {} } = {}) {
     ids.set(id, node)
     return node
   }
-  for (const match of html.matchAll(/\bid="([^"]+)"/g)) element(match[1])
+  for (const match of page.matchAll(/\bid="([^"]+)"/g)) element(match[1])
   const modes = ['local', 'remote', 'socks'].map(mode => element(`tab-${mode}`, { mode }))
   const systems = ['mac', 'windows', 'linux'].map(os => element(`os-${os}`, { os }))
-  const triggers = [...html.matchAll(/<button[^>]*data-open-connections/g)].map((_, index) => element(`connection-trigger-${index}`))
+  const triggers = [...page.matchAll(/<button[^>]*data-open-connections/g)].map((_, index) => element(`connection-trigger-${index}`))
   ids.get('proxy-toggle').setAttribute('aria-pressed', 'false')
   ids.get('menubar-trigger').setAttribute('aria-expanded', 'true')
   runInNewContext(source, { document: {
+    documentElement: { lang: language },
     getElementById(id) { assert.ok(ids.has(id), `missing HTML element: ${id}`); return ids.get(id) },
     querySelectorAll(selector) { return { '[data-mode]': modes, '[data-os]': systems, '[data-open-connections]': triggers }[selector] },
   }, navigator: { platform, userAgent: platform, clipboard: { writeText: clipboard } } })
@@ -39,10 +42,12 @@ function setup({ platform = 'MacIntel', clipboard = async () => {} } = {}) {
 }
 
 test('landing page has local assets, valid anchors, unique IDs, and no live API dependency', () => {
-  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])
-  assert.equal(new Set(ids).size, ids.length)
-  for (const [, anchor] of html.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.includes(anchor), `missing anchor ${anchor}`)
-  for (const [, asset] of html.matchAll(/(?:href|src)="\.\/([^"]+)"/g)) assert.ok(existsSync(new URL(asset, root)), `missing asset ${asset}`)
+  for (const page of [html, englishHtml]) {
+    const ids = [...page.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])
+    assert.equal(new Set(ids).size, ids.length)
+    for (const [, anchor] of page.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.includes(anchor), `missing anchor ${anchor}`)
+    for (const [, asset] of page.matchAll(/(?:href|src)="\.\/([^"]+)"/g)) assert.ok(existsSync(new URL(asset, root)), `missing asset ${asset}`)
+  }
   assert.match(html, /交互预览 · 示例数据/)
   assert.match(html, /href="https:\/\/github\.com\/raojinlin\/portway"[^>]+target="_blank"[^>]+rel="noopener noreferrer"/)
   assert.doesNotMatch(source, /\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/)
@@ -51,6 +56,30 @@ test('landing page has local assets, valid anchors, unique IDs, and no live API 
   assert.match(css, /prefers-reduced-motion/)
   assert.match(css, /max-width: 480px/)
   assert.match(css, /max-width: 360px/)
+})
+
+test('both languages have indexable metadata and discoverable language links', () => {
+  for (const [page, lang, locale, alternate] of [[html, 'zh-CN', 'zh_CN', 'en.html'], [englishHtml, 'en', 'en_US', 'index.html']]) {
+    assert.match(page, new RegExp(`<html lang="${lang}">`))
+    assert.match(page, /<meta name="description" content="[^"]+">/)
+    assert.match(page, /<meta name="robots" content="index, follow/)
+    assert.match(page, new RegExp(`<meta property="og:locale" content="${locale}">`))
+    assert.match(page, /<meta name="twitter:card" content="summary">/)
+    assert.match(page, new RegExp(`class="language-link" href="\\./${alternate}"`))
+  }
+  assert.doesNotMatch(englishHtml.replace('>中文</a>', '>Chinese</a>'), /[\u3400-\u9fff]/)
+})
+
+test('English interactions keep dynamic copy in English', async () => {
+  const h = setup({ language: 'en', platform: 'Win32' })
+  await h.modes[1].fire('click')
+  assert.match(h.get('mode-title').textContent, /remote host/)
+  await h.get('proxy-toggle').fire('click')
+  assert.match(h.get('proxy-status').textContent, /Stopped/)
+  assert.match(h.get('menubar-feedback').textContent, /Sample tunnel stopped/)
+  assert.match(h.get('os-description').textContent, /installer/)
+  await h.get('copy-proxy').fire('click')
+  assert.match(h.get('copy-feedback').textContent, /Example copied/)
 })
 
 test('all forwarding modes update their route, command and tab accessibility', async () => {

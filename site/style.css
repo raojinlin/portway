@@ -86,6 +86,8 @@ h1, h2 { font-family: var(--sans); font-weight: 600; }
 .brand-dot { color: var(--accent); margin-left: -9px; }
 .site-header nav { display: flex; gap: 34px; margin-left: auto; font-size: 13px; }
 .site-header nav a:hover, .site-footer a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 5px; }
+.language-link { flex-shrink: 0; font: 600 12px var(--sans); color: var(--ink-2); border: 1px solid var(--rule); border-radius: 4px; padding: 9px 11px; line-height: 1.5; }
+.language-link:hover { color: var(--accent); border-color: var(--accent); }
 .nav-download { border: 1px solid var(--rule); border-radius: 4px; padding: 9px 17px; font-size: 13px; }
 .nav-download span { margin-left: 16px; }
 .nav-download:hover { background: var(--surface); }
@@ -94,6 +96,7 @@ h1, h2 { font-family: var(--sans); font-weight: 600; }
 .hero .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }
 .tiny-line { width: 22px; height: 1px; background: var(--accent); }
 h1 { font-size: clamp(46px, 5vw, 72px); letter-spacing: -2.5px; line-height: 1.28; white-space: nowrap; }
+html[lang="en"] h1 { font-size: clamp(38px, 4.5vw, 66px); }
 .title-emphasis { color: var(--accent); position: relative; }
 .title-emphasis::after { content: ''; position: absolute; height: 5px; background: var(--accent); opacity: .55; left: 2px; right: 5px; bottom: -7px; transform: rotate(-2deg); }
 .hero-description { font-size: 16px; color: var(--ink-2); line-height: 2; margin-top: 30px; }
@@ -359,6 +362,7 @@ th { font-family: var(--sans); font-weight: 500; color: var(--ink-2); }
   .site-header nav a { font-size: 11px; }
   .nav-download { display: none; }
   h1 { font-size: 53px; letter-spacing: -2px; }
+  html[lang="en"] h1 { font-size: clamp(34px, 9vw, 44px); }
   .hero .eyebrow { font-size: 10px; letter-spacing: 1px; }
   .hero-description { font-size: 14px; }
   .hero-actions { gap: 20px; }

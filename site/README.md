@@ -1,6 +1,6 @@
 # Portway 落地页
 
-独立的中文产品官网，不替换 `web/` 管理界面，也不连接运行中的 Portway 服务。HTML、CSS 和原生 JavaScript，无第三方字体、运行时依赖或外部统计脚本。
+独立的中英文产品官网，不替换 `web/` 管理界面，也不连接运行中的 Portway 服务。`index.html` 为中文，`en.html` 为英文；两页均为可直接索引的静态 HTML，并提供语言切换入口。HTML、CSS 和原生 JavaScript，无第三方字体、运行时依赖或外部统计脚本。
 
 配色与 App 的 `web/src/index.css` 一致：灰白 / 深灰底、蓝色强调色。页头可选浅色、深色或跟随系统，默认跟随系统并实时响应系统主题变化；手动偏好保存在浏览器 `portway-site-theme` 中，不修改桌面应用设置。禁用 JavaScript 时仍通过 CSS 跟随系统。
 
@@ -23,11 +23,9 @@
 
 ## 部署
 
-将此目录中的 `index.html`、`style.css`、`theme.js`、`main.js` 和 `mark.svg` 原样部署到任意静态站点服务。无需构建，资源路径均为相对路径，支持部署在子目录。不需要部署本地预览服务器。
+将此目录中的 `index.html`、`en.html`、`style.css`、`theme.js`、`main.js` 和 `mark.svg` 原样部署到任意静态站点服务。无需构建，资源路径均为相对路径，支持部署在子目录。不需要部署本地预览服务器。
 
-仓库中的 `.github/workflows/site-pages.yml` 会在 `master` 分支的 `site/` 变更推送后自动部署到 GitHub Pages，也可以从 Actions 页面手动运行。Pull Request 只运行页面测试，不会发布。首次启用时，在仓库 Settings → Pages → Build and deployment 中将 Source 设为 GitHub Actions。
-
-部署完成后，页面地址通常为 `https://<用户名>.github.io/<仓库名>/`。资源路径使用相对路径，因此可以直接部署在仓库子路径下；公开域名确定后，可再添加 canonical URL、社交分享图及 sitemap。
+两页分别设置 `lang`、标题、描述、Open Graph 语言和分享摘要。公开域名及最终部署路径确定后，再为两页添加绝对 canonical URL、双向绝对 hreflang URL、社交分享图及 sitemap；目前不要填写猜测的域名。本次不包含自动部署，不改动现有桌面和 CLI 打包流程。
 
 ## 检查
 
