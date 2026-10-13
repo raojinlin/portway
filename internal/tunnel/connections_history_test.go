@@ -70,7 +70,7 @@ func TestServeConnectionsDrainsHistoryOnStop(t *testing.T) {
 			var data [1]byte
 			_, err := conn.Read(data[:])
 			return nil, err
-		}, func() {})
+		}, nil, func() {})
 	}()
 	select {
 	case <-dialing:
@@ -96,6 +96,31 @@ func TestServeConnectionsDrainsHistoryOnStop(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("did not drain")
+	}
+}
+
+func TestServeConnectionsReturnsWhenSSHTransportIsLost(t *testing.T) {
+	listener := &historyTestListener{closed: make(chan struct{})}
+	transportDone := make(chan error, 1)
+	inst := &Instance{cfg: Config{Name: "sleep-wake"}}
+	done := make(chan error, 1)
+	go func() {
+		done <- inst.serveConnections(context.Background(), listener, nil, transportDone, func() {})
+	}()
+
+	transportDone <- errors.New("read: connection reset by peer")
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "ssh connection lost") || !strings.Contains(err.Error(), "connection reset by peer") {
+			t.Fatalf("unexpected transport error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("listener was not stopped after SSH transport loss")
+	}
+	select {
+	case <-listener.closed:
+	default:
+		t.Fatal("listener was not closed after SSH transport loss")
 	}
 }
 

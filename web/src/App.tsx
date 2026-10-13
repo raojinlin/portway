@@ -90,7 +90,12 @@ function Board() {
           tunnels={tunnels}
           loaded={loaded}
           onChanged={refresh}
-          onEdit={(tunnel) => { setEditingTunnel(tunnel); setModalOpen(true) }}
+          onEdit={(tunnel) => {
+            void api.get(tunnel.Name).then((detail) => {
+              setEditingTunnel(detail)
+              setModalOpen(true)
+            }).catch((err) => message.error(tr('刷新失败：{error}', { error: (err as Error).message })))
+          }}
         />}
       </div>
 

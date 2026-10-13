@@ -66,6 +66,11 @@ func TestDaemonLifecycle(t *testing.T) {
 		LocalListen:    "127.0.0.1:0",
 		SSHAddress:     "127.0.0.1:1",
 		SSHUser:        "testuser",
+		SSHKeyPath:     "/tmp/original-key",
+		SSHConfigPath:  "/tmp/ssh-config",
+		KnownHostsPath: "/tmp/known-hosts",
+		KeepAlive:      "45s",
+		ReconnectDelay: "2s",
 		ForwardAddress: "10.0.0.1:80",
 	}
 	var created TunnelView
@@ -75,6 +80,13 @@ func TestDaemonLifecycle(t *testing.T) {
 	}
 	if created.Name != "demo" || !created.Enabled {
 		t.Fatalf("unexpected created view: %+v", created)
+	}
+	var detail TunnelView
+	resp = doJSON(t, http.MethodGet, ts.URL+"/api/tunnels/demo", nil, &detail)
+	if resp.StatusCode != http.StatusOK || detail.SSHUser != createReq.SSHUser || detail.SSHKeyPath != createReq.SSHKeyPath ||
+		detail.SSHConfigPath != createReq.SSHConfigPath || detail.KnownHostsPath != createReq.KnownHostsPath ||
+		detail.KeepAlive != createReq.KeepAlive || detail.ReconnectDelay != createReq.ReconnectDelay {
+		t.Fatalf("edit detail did not include saved connection settings: %+v", detail)
 	}
 
 	updateReq := createReq

@@ -33,6 +33,8 @@ const (
 	// DirectionDynamic runs a local SOCKS5 proxy on LocalListen; the target
 	// for each connection is supplied by the SOCKS5 client (ssh -D).
 	DirectionDynamic Direction = "dynamic"
+
+	keepAliveReplyTimeout = 10 * time.Second
 )
 
 // Config describes a single tunnel.
@@ -277,7 +279,9 @@ func (i *Instance) connectAndServe(ctx context.Context) error {
 	})
 	logging.FromContext(ctx).Info("tunnel listening", "tunnel", i.cfg.Name, "direction", i.cfg.direction(), "listen", ln.Addr().String(), "http_listen", httpAddress)
 
-	return i.serveListeners(ctx, listeners, func() { cancel(); client.Close() })
+	transportDone := make(chan error, 1)
+	go func() { transportDone <- client.Wait() }()
+	return i.serveListeners(ctx, listeners, transportDone, func() { cancel(); client.Close() })
 }
 
 type listenerDial struct {
@@ -286,11 +290,11 @@ type listenerDial struct {
 }
 
 // Drain connection finalizers before Stop returns, so the daemon can safely close its history log.
-func (i *Instance) serveConnections(ctx context.Context, ln net.Listener, dial dstDialer, closeTransport func()) error {
-	return i.serveListeners(ctx, []listenerDial{{ln, dial}}, closeTransport)
+func (i *Instance) serveConnections(ctx context.Context, ln net.Listener, dial dstDialer, transportDone <-chan error, closeTransport func()) error {
+	return i.serveListeners(ctx, []listenerDial{{ln, dial}}, transportDone, closeTransport)
 }
 
-func (i *Instance) serveListeners(ctx context.Context, listeners []listenerDial, closeTransport func()) error {
+func (i *Instance) serveListeners(ctx context.Context, listeners []listenerDial, transportDone <-chan error, closeTransport func()) error {
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, len(listeners))
 	var connections sync.WaitGroup
@@ -326,6 +330,14 @@ func (i *Instance) serveListeners(ctx context.Context, listeners []listenerDial,
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case err := <-transportDone:
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err == nil {
+			err = io.EOF
+		}
+		return fmt.Errorf("ssh connection lost: %w", err)
 	case err := <-errCh:
 		return err
 	}
@@ -393,7 +405,7 @@ func (i *Instance) dialSSH(ctx context.Context) (*ssh.Client, error) {
 		return nil, err
 	}
 	if i.cfg.KeepAlive > 0 {
-		go keepAlive(ctx, client, i.cfg.KeepAlive, i.cfg.Name, i.cfg.SSHPassword)
+		go keepAlive(ctx, client, i.cfg.KeepAlive, keepAliveReplyTimeout, i.cfg.Name, i.cfg.SSHPassword)
 	}
 	return client, nil
 }
@@ -545,7 +557,12 @@ func (w countingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func keepAlive(ctx context.Context, c *ssh.Client, interval time.Duration, name, password string) {
+type keepAliveClient interface {
+	SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error)
+	Close() error
+}
+
+func keepAlive(ctx context.Context, c keepAliveClient, interval, replyTimeout time.Duration, name, password string) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -554,10 +571,31 @@ func keepAlive(ctx context.Context, c *ssh.Client, interval time.Duration, name,
 			return
 		case <-ticker.C:
 		}
-		_, _, err := c.SendRequest("keepalive@openssh.com", true, nil)
+		result := make(chan error, 1)
+		go func() {
+			_, _, err := c.SendRequest("keepalive@openssh.com", true, nil)
+			result <- err
+		}()
+		timer := time.NewTimer(replyTimeout)
+		var err error
+		select {
+		case err = <-result:
+			if !timer.Stop() {
+				<-timer.C
+			}
+		case <-timer.C:
+			err = fmt.Errorf("reply timed out after %s", replyTimeout)
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return
+		}
 		if err != nil {
 			if ctx.Err() == nil {
 				logging.FromContext(ctx).Warn("SSH keepalive failed", "tunnel", name, "error", logging.SafeError(err, password))
+				// Force Wait to return so the listener is torn down and run can reconnect.
+				_ = c.Close()
 			}
 			return
 		}

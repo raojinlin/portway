@@ -35,6 +35,34 @@ interface FormValues {
   insecure_skip_host_key_check?: boolean
 }
 
+const emptyFormValues: Partial<FormValues> = {
+  direction: 'local',
+  service_icon: 'auto',
+  trust_new_host_key: false,
+  insecure_skip_host_key_check: false,
+}
+
+export function formValuesForTunnel(tunnel: TunnelView): FormValues {
+  return {
+    name: tunnel.Name,
+    service_icon: tunnel.service_icon || 'auto',
+    direction: tunnel.direction,
+    local_listen: tunnel.configured_local_listen ?? tunnel.local_listen,
+    http_listen: tunnel.configured_http_listen ?? tunnel.http_listen,
+    ssh_address: tunnel.ssh_address,
+    remote_listen: tunnel.remote_listen,
+    forward_address: tunnel.forward_address,
+    ssh_user: tunnel.ssh_user,
+    ssh_key_path: tunnel.ssh_key_path,
+    ssh_config_path: tunnel.ssh_config_path,
+    known_hosts_path: tunnel.known_hosts_path,
+    keep_alive: tunnel.keep_alive,
+    reconnect_delay: tunnel.reconnect_delay,
+    trust_new_host_key: tunnel.trust_new_host_key,
+    insecure_skip_host_key_check: tunnel.insecure_skip_host_key_check,
+  }
+}
+
 function FieldLabel({ children, tip }: { children: ReactNode; tip: ReactNode }) {
   const { tr } = useI18n()
   return (
@@ -73,24 +101,7 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
     if (!open) return
     form.resetFields()
     if (tunnel) {
-      form.setFieldsValue({
-        name: tunnel.Name,
-        service_icon: tunnel.service_icon || 'auto',
-        direction: tunnel.direction,
-        local_listen: tunnel.configured_local_listen ?? tunnel.local_listen,
-        http_listen: tunnel.configured_http_listen ?? tunnel.http_listen,
-        ssh_address: tunnel.ssh_address,
-        remote_listen: tunnel.remote_listen,
-        forward_address: tunnel.forward_address,
-        ssh_user: tunnel.ssh_user,
-        ssh_key_path: tunnel.ssh_key_path,
-        ssh_config_path: tunnel.ssh_config_path,
-        known_hosts_path: tunnel.known_hosts_path,
-        keep_alive: tunnel.keep_alive,
-        reconnect_delay: tunnel.reconnect_delay,
-        trust_new_host_key: tunnel.trust_new_host_key,
-        insecure_skip_host_key_check: tunnel.insecure_skip_host_key_check,
-      })
+      form.setFieldsValue(formValuesForTunnel(tunnel))
     }
   }, [open, form, tunnel])
 
@@ -146,7 +157,7 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
         form={form}
         layout="vertical"
         onFinish={handleFinish}
-        initialValues={{ direction: 'local', service_icon: 'auto', trust_new_host_key: false, insecure_skip_host_key_check: false }}
+        initialValues={tunnel ? formValuesForTunnel(tunnel) : emptyFormValues}
       >
         <div className="form-section">
           <Form.Item

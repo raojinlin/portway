@@ -5,12 +5,50 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
+
+type stalledKeepAliveClient struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (c *stalledKeepAliveClient) SendRequest(string, bool, []byte) (bool, []byte, error) {
+	<-c.closed
+	return false, nil, net.ErrClosed
+}
+
+func (c *stalledKeepAliveClient) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	return nil
+}
+
+func TestKeepAliveTimeoutClosesStaleSSHConnection(t *testing.T) {
+	client := &stalledKeepAliveClient{closed: make(chan struct{})}
+	done := make(chan struct{})
+	go func() {
+		keepAlive(context.Background(), client, time.Millisecond, 5*time.Millisecond, "sleep-wake", "")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("keepalive timeout did not close stale SSH connection")
+	}
+	select {
+	case <-client.closed:
+	default:
+		t.Fatal("stale SSH connection remained open")
+	}
+}
 
 func TestValidateConfig(t *testing.T) {
 	cases := []struct {
