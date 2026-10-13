@@ -41,6 +41,7 @@ function routeParts(t: TunnelView, tr: Translate): Array<{ label: string; value:
   if (t.direction === 'dynamic') {
     return [
       { label: tr("SOCKS5 监听"), value: t.local_listen },
+      ...(t.http_listen ? [{ label: tr("HTTP 代理监听"), value: t.http_listen }] : []),
       { label: tr("SSH 跳板"), value: t.ssh_address },
       { label: tr("目标"), value: tr("由客户端指定") },
     ]

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f5f7">
+  <meta name="description" content="Portway manages SSH local and remote forwarding and SOCKS5 proxies from a desktop app or web interface. The desktop app supports macOS, Windows, and Linux.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta property="og:title" content="Portway — SSH Tunnel Manager">
+  <meta property="og:description" content="Manage SSH tunnels, inspect connections and traffic, and connect AI agents through local MCP.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Portway">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="zh_CN">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Portway — SSH Tunnel Manager">
+  <meta name="twitter:description" content="Manage SSH tunnels, inspect connections and traffic, and connect AI agents through local MCP.">
+  <title>Portway — SSH Tunnel Manager</title>
+  <link rel="icon" href="./mark.svg" type="image/svg+xml">
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="brand" href="#" aria-label="Portway home"><img src="./mark.svg" width="30" height="30" alt="">Portway<span class="brand-dot">.</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#where">Desktop / Web</a>
+      <a href="#workflow">Forwarding</a>
+      <a href="#agent">Agent</a>
+    </nav>
+    <a class="language-link" href="./index.html" lang="zh-CN" hreflang="zh-CN" aria-label="Switch to Chinese">中文</a>
+    <label class="theme-control"><span class="sr-only">Page theme</span><select id="theme-select" aria-label="Page theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <a class="nav-download" href="#download">Install guide <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="tiny-line"></span> SSH tunnel manager</p>
+        <h1 id="hero-title">SSH tunnels<br><span class="title-emphasis">under control.</span></h1>
+        <p class="hero-description">Manage tunnels directly on your computer with the desktop app.<br>Run the web interface on a personal computer or server<br>to inspect, configure, start, and stop its tunnels in a browser.</p>
+        <div class="hero-actions"><a class="button primary" href="#download">View install guide <span aria-hidden="true">↗</span></a><a class="text-link" href="#where">Explore desktop and web <span aria-hidden="true">↓</span></a></div>
+        <p class="platform-note">macOS <span>/</span> Windows <span>/</span> Linux</p>
+      </div>
+
+      <div class="hero-stage">
+        <div class="stage-label"><span>INTERACTIVE TUNNEL PREVIEW</span><span>01 — 03</span></div>
+        <div class="app-window" aria-label="Interactive tunnel preview; all data is illustrative">
+          <div class="window-chrome"><div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div><span>Portway</span><span class="window-mark" aria-hidden="true">⌘</span></div>
+          <div class="demo-content">
+            <div class="demo-heading"><strong>Tunnels</strong><span><i class="status-dot"></i> <b id="running-count">3</b> running</span></div>
+            <div class="demo-line">
+              <div class="demo-line-top"><span class="service-icon postgres">PG</span><strong>work-database</strong><span class="type-label">Local forwarding</span><i class="status-dot" aria-label="Running"></i></div>
+              <div class="demo-route"><code>127.0.0.1:15432</code><span>→</span><span>jump</span><span>→</span><code>db:5432</code></div>
+              <div class="demo-line-bottom"><span>Received <b>24.8 MB</b><span class="stat-gap">Sent <b>1.2 MB</b></span></span><button class="connection-button" data-open-connections>4 connections <span aria-hidden="true">↗</span></button></div>
+            </div>
+            <div class="demo-line">
+              <div class="demo-line-top"><span class="service-icon web">↗</span><strong>dev-preview</strong><span class="type-label">Remote forwarding</span><i class="status-dot" aria-label="Running"></i></div>
+              <div class="demo-route"><code>127.0.0.1:9000</code><span>→</span><span>dev-box</span><span>→</span><code>localhost:3000</code></div>
+              <div class="demo-line-bottom"><span>Received <b>8.6 MB</b><span class="stat-gap">Sent <b>320 KB</b></span></span><span>2 connections</span></div>
+            </div>
+            <div class="demo-line proxy-line" id="proxy-line">
+              <div class="demo-line-top"><span class="service-icon proxy">S5</span><strong>daily-proxy</strong><span class="type-label">SOCKS5</span><i class="status-dot" id="proxy-dot" aria-label="Running"></i></div>
+              <div class="demo-route"><code>127.0.0.1:1080</code><span>→</span><span>gateway</span><span>→</span><span>Chosen by client</span></div>
+              <div class="demo-line-bottom"><span id="proxy-status">Running</span><button id="proxy-toggle" class="proxy-toggle" aria-pressed="false"><span aria-hidden="true">■</span> Stop tunnel</button></div>
+            </div>
+            <div class="demo-footer"><span><i class="mini-lock" aria-hidden="true"></i> Encrypted SSH connection</span><span>Configuration stored locally</span></div>
+          </div>
+        </div>
+        <div class="preview-caption"><span><span class="caption-star" aria-hidden="true">✳</span> Try “Stop tunnel” and the connection count.</span><span>Interactive preview · sample data</span></div>
+      </div>
+    </section>
+
+    <div class="capability-strip wrap" aria-label="Core capabilities"><p>Works with your<br><strong>SSH configuration.</strong></p><span><i aria-hidden="true">✓</i> ~/.ssh/config</span><span><i aria-hidden="true">✓</i> Multi-hop ProxyJump</span><span><i aria-hidden="true">✓</i> Native SSH connection</span><span><i aria-hidden="true">✓</i> Automatic reconnection</span></div>
+
+    <section class="where-section wrap section-space" id="where" aria-labelledby="where-title">
+      <div class="where-heading"><p class="eyebrow">Where to use it</p><h2 id="where-title">Manage tunnels in an app<br>or a browser.</h2></div>
+      <div class="where-options">
+        <article><span class="where-index">01 / DESKTOP</span><h3>Desktop app</h3><p>Install on macOS, Windows, or Linux. Manage tunnels in the app window; the macOS menu bar and Windows tray show status and let you start or stop tunnels.</p><a class="text-link" href="#download">Desktop installation <span aria-hidden="true">↗</span></a></article>
+        <article><span class="where-index">02 / WEB</span><h3>Web interface</h3><p>Run Portway on a personal computer or server. Inspect connections and manage tunnels in a browser or from the command line.</p></article>
+      </div>
+      <p class="where-note">Each installation manages tunnels on its own device.</p>
+    </section>
+
+    <section class="workflow wrap section-space" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-heading"><p class="eyebrow">01 / Forwarding modes</p><h2 id="workflow-title">Local and remote forwarding<br>plus SOCKS5 proxying.</h2><p>Enter an SSH server and listening address.<br>Local and remote forwarding also need a destination.</p></div>
+      <div class="workflow-interactive">
+        <div class="mode-tabs" role="tablist" aria-label="Forwarding">
+          <button id="tab-local" role="tab" aria-controls="mode-panel" aria-selected="true" data-mode="local">Local <code>-L</code></button>
+          <button id="tab-remote" role="tab" aria-controls="mode-panel" aria-selected="false" tabindex="-1" data-mode="remote">Remote <code>-R</code></button>
+          <button id="tab-socks" role="tab" aria-controls="mode-panel" aria-selected="false" tabindex="-1" data-mode="socks">SOCKS5 <code>-D</code></button>
+        </div>
+        <div id="mode-panel" class="mode-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-local">
+          <div class="panel-kicker"><span id="mode-kicker">LOCAL FORWARDING</span><span class="panel-number" id="mode-number">01</span></div>
+          <h3 id="mode-title">Reach a private database from your computer</h3>
+          <p id="mode-description">A local database client connects to 127.0.0.1:15432; the SSH server forwards it to db:5432.</p>
+          <div class="route-diagram" aria-label="Connection route">
+            <div><span class="node-symbol" aria-hidden="true">▤</span><strong id="route-from">Your computer</strong><code id="route-from-address">127.0.0.1:15432</code></div>
+            <span class="route-wire" aria-hidden="true"><i></i></span>
+            <div><span class="node-symbol gateway-symbol" aria-hidden="true">⇄</span><strong>SSH server</strong><code id="route-gateway">jump</code></div>
+            <span class="route-wire" aria-hidden="true"><i></i></span>
+            <div><span class="node-symbol" aria-hidden="true">▥</span><strong id="route-to">Private database</strong><code id="route-to-address">db:5432</code></div>
+          </div>
+          <div class="terminal-line"><span aria-hidden="true">$</span><code id="mode-command">ssh -L 15432:db:5432 jump</code></div>
+          <p class="panel-note" id="mode-note">Save a tunnel to start or stop it. Addresses are illustrative.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="menubar-section wrap" aria-labelledby="menubar-title">
+      <div class="menubar-stage" aria-label="macOS menu bar web preview with sample data">
+        <div class="menubar-strip"><span>macOS <span class="menubar-strip-label">menu bar</span></span><button id="menubar-trigger" class="menubar-trigger" aria-label="Expand or collapse Portway menu bar preview; upload 12.4 KB/s, download 286 KB/s" aria-expanded="true" aria-controls="menubar-panel"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16l-4-4m4 4-4 4M20 17H4l4-4m-4 4 4 4"/></svg><span class="menubar-speeds"><span>12.4 KB/s</span><span>286 KB/s</span></span></button><span class="menubar-clock" aria-hidden="true">09:41</span></div>
+        <div class="menubar-panel" id="menubar-panel">
+          <a class="menubar-link" href="#hero-title"><span aria-hidden="true">▣</span> Open Portway <span class="menubar-hint">main window preview ↗</span></a>
+          <div class="menubar-lines">
+            <details class="menubar-tunnel"><summary><i class="status-dot"></i><span class="service-icon postgres">PG</span><span class="menubar-name">work-database</span><span class="menubar-rate">42 KB/s</span><span class="menubar-chevron" aria-hidden="true">›</span></summary><div class="menubar-submenu"><p>Local <code>127.0.0.1:15432 → db:5432</code></p><button data-open-connections><span aria-hidden="true">⌕</span> View connections <span class="menubar-hint">4</span></button></div></details>
+            <details class="menubar-tunnel" open><summary><i class="status-dot" id="menubar-proxy-dot" aria-label="Running"></i><span class="service-icon proxy">S5</span><span class="menubar-name">daily-proxy</span><span class="menubar-rate" id="menubar-proxy-rate">244 KB/s</span><span class="menubar-chevron" aria-hidden="true">›</span></summary><div class="menubar-submenu"><p>SOCKS5 <code>127.0.0.1:1080 → gateway</code></p><button id="menubar-proxy-toggle"><span aria-hidden="true">■</span> Stop tunnel</button><button id="menubar-copy-proxy"><span aria-hidden="true">⧉</span> Copy proxy command</button></div></details>
+          </div>
+          <p class="menubar-feedback" id="menubar-feedback" role="status"></p>
+          <span class="menubar-demo-label">Interactive preview · does not control the system menu or real tunnels</span>
+        </div>
+      </div>
+      <div class="menubar-explainer"><p class="eyebrow">macOS / Menu bar</p><h2 id="menubar-title">See traffic and control tunnels<br>from the menu bar.</h2><p>Upload and download rates appear beside the icon. They cover Portway tunnels only, not other network traffic.</p><ol><li><strong>Inspect tunnels</strong><span>Click the icon to see tunnel status and transfer rates.</span></li><li><strong>Start or stop tunnels</strong><span>Expand daily-proxy to stop or restart this sample tunnel.</span></li><li><strong>View connections</strong><span>Expand work-database and select “View connections” to open sample details.</span></li></ol><p class="menubar-platform-note">This is a web preview of the macOS menu bar. Windows has a tray entry; Linux does not currently have one. The preview follows the page theme.</p></div>
+    </section>
+
+    <section class="details-section" id="details" aria-labelledby="details-title">
+      <div class="wrap details-inner">
+        <div class="details-heading"><p class="eyebrow">02 / Runtime status</p><h2 id="details-title">Inspect tunnel status,<br>connections, and logs.</h2><p>The menu bar or tray shows status and traffic. View connection details and runtime logs in the app window.</p></div>
+        <div class="detail-list">
+          <article><span class="detail-index">01</span><div><h3>Keep running after closing the window</h3><p>The macOS menu bar and Windows tray let you inspect and control tunnels. With launch at login enabled, active tunnels are restored after login.</p><span class="detail-footnote">On Linux, closing the window exits the app.</span></div><span class="detail-symbol" aria-hidden="true">↗</span></article>
+          <article><span class="detail-index">02</span><div><h3>Inspect active connections and history</h3><p>Active connections show source, destination, duration, and traffic. Runtime logs help diagnose errors; SOCKS5 request history is stored in a local file.</p><button class="text-link inline-link" data-open-connections>View sample connection details <span aria-hidden="true">↗</span></button></div><span class="detail-symbol" aria-hidden="true">⌕</span></article>
+          <article><span class="detail-index">03</span><div><h3>Copy a terminal proxy command</h3><p>Get Bash, Zsh, and PowerShell commands that set SOCKS5 proxy environment variables for the current terminal without changing the system proxy.</p><button class="copy-button" id="copy-proxy"><span aria-hidden="true">⧉</span> Copy Bash / Zsh example</button><span class="copy-feedback" id="copy-feedback" role="status"></span></div><span class="detail-symbol" aria-hidden="true">⌘</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="agent-section wrap section-space" id="agent" aria-labelledby="agent-title">
+      <div class="agent-intro"><p class="eyebrow">03 / MCP and agents</p><h2 id="agent-title">Connect Codex and other agents<br>through MCP.</h2><p>After you enable MCP, agents can inspect tunnels and active connections. Portway permissions determine whether they can start, stop, edit, or delete tunnels.</p></div>
+      <div class="agent-steps" aria-label="Steps to connect an agent">
+        <div><span>01</span><p><strong>Open MCP settings</strong> Choose read-only, inspect and control, or full management access; then configure token or OAuth authentication.</p></div>
+        <div><span>02</span><p><strong>Connect your agent</strong> Copy the Codex, Claude Code, or generic client connection example from settings and authenticate with your chosen token or OAuth mode.</p></div>
+        <div><span>03</span><p><strong>Install the Skill if needed</strong> The settings page provides a download and installation instructions for agents. The Skill explains Portway tools and their boundaries; it does not change MCP permissions.</p></div>
+        <p class="agent-boundary">MCP listens only on the local loopback address. MCP tools neither accept nor return SSH passwords; unauthorized actions are absent from the agent tool list.</p>
+      </div>
+    </section>
+
+    <section class="ground-rules wrap section-space" aria-labelledby="rules-title">
+      <div><p class="eyebrow">04 / Authentication and data</p><h2 id="rules-title">Use your SSH configuration.<br>Keep data on your device.</h2></div>
+      <div class="rules-copy"><p>Use Host aliases, private keys, and ProxyJump from your SSH config. Standard SSH and ProxyJump are implemented in Go, so the system <code>ssh</code> command is not required.</p><p>Server host keys are strictly verified by default. Tunnel settings and logs stay on your device; no account is required.</p></div>
+    </section>
+
+    <section class="download-section wrap" id="download" aria-labelledby="download-title">
+      <div class="download-copy"><p class="eyebrow">Install guide</p><h2 id="download-title">Install the desktop app.</h2><p>Choose a package for your operating system.<br>Packages are provided by the project maintainer.</p></div>
+      <div class="download-panel">
+        <div class="os-selector" role="group" aria-label="Choose an operating system"><button data-os="mac" aria-pressed="true">macOS</button><button data-os="windows" aria-pressed="false">Windows</button><button data-os="linux" aria-pressed="false">Linux</button></div>
+        <div class="download-info" aria-live="polite"><span class="download-platform" id="os-title">macOS</span><span id="os-support">12+ · Apple Silicon and Intel</span><p id="os-description">Open the DMG or extract the ZIP, drag Portway.app into Applications, and open it from there.</p></div>
+        <p class="download-help">Get the package for your platform from the project maintainer.</p>
+        <p class="signing-note" id="os-warning">The current macOS package is not notarized, so macOS may warn about an unknown developer. Verify the download source.</p>
+      </div>
+    </section>
+
+    <section class="faq wrap" aria-labelledby="faq-title">
+      <h2 id="faq-title">Frequently asked questions</h2>
+      <div class="faq-list">
+        <details><summary>Do I need Go, Node.js, or SSH installed?<span aria-hidden="true">+</span></summary><p>The packaged desktop app does not need Go or Node.js. Standard SSH and ProxyJump do not require the system ssh command. A custom ProxyCommand may still need an external program. Windows needs WebView2; Linux needs GTK3 and WebKitGTK 4.1.</p></details>
+        <details><summary>Can I use my existing SSH config?<span aria-hidden="true">+</span></summary><p>Yes. Enter a Host alias as the tunnel SSH server. Portway reads ~/.ssh/config and supports IdentityFile, ProxyJump, and multiple hops. Some OpenSSH extensions are not supported.</p></details>
+        <details><summary>Where can I run the web interface?<span aria-hidden="true">+</span></summary><p>Run it on a personal computer or server without a graphical desktop. Open the management page in a browser to inspect connections and configure or control tunnels.</p></details>
+        <details><summary>Can an agent manage my tunnels?<span aria-hidden="true">+</span></summary><p>Enable MCP in Portway and connect the client to the local MCP service. The default “inspect and control” permission allows viewing, starting, and stopping tunnels; creating, editing, or deleting requires “full management.” The built-in Skill explains tool usage but does not change access.</p></details>
+        <details><summary>Does SOCKS5 change the system proxy?<span aria-hidden="true">+</span></summary><p>No. The copied command only affects programs in the current terminal that support proxy environment variables and SOCKS5. Portway supports TCP CONNECT, not UDP or SOCKS5 username/password authentication; bind to loopback where possible.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap"><a class="brand" href="#"><img src="./mark.svg" width="26" height="26" alt="">Portway<span class="brand-dot">.</span></a><p>SSH tunnel manager</p></footer>
+
+  <dialog id="connections-dialog" aria-labelledby="connections-title">
+    <div class="dialog-heading"><div><p class="eyebrow">WORK-DATABASE / SAMPLE DATA</p><h2 id="connections-title">Active connections</h2></div><button id="close-dialog" aria-label="Close connection details">×</button></div>
+    <p>Four sample connections reach db:5432 through jump. This preview does not establish real SSH connections.</p>
+    <div class="table-scroll"><table><thead><tr><th scope="col">Source address</th><th scope="col">Destination</th><th scope="col">Duration</th><th scope="col">Received</th></tr></thead><tbody><tr><td>127.0.0.1:51824</td><td>db:5432</td><td>12m 08s</td><td>18.2 MB</td></tr><tr><td>127.0.0.1:51826</td><td>db:5432</td><td>08m 32s</td><td>4.1 MB</td></tr><tr><td>127.0.0.1:51830</td><td>db:5432</td><td>02m 17s</td><td>1.8 MB</td></tr><tr><td>127.0.0.1:51842</td><td>db:5432</td><td>00m 46s</td><td>0.7 MB</td></tr></tbody></table></div>
+  </dialog>
+</body>
+</html>

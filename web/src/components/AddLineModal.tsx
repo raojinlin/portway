@@ -20,6 +20,7 @@ interface FormValues {
   name: string
   direction: Direction
   local_listen?: string
+  http_listen?: string
   ssh_address: string
   remote_listen?: string
   forward_address?: string
@@ -76,7 +77,8 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
         name: tunnel.Name,
         service_icon: tunnel.service_icon || 'auto',
         direction: tunnel.direction,
-        local_listen: tunnel.local_listen,
+        local_listen: tunnel.configured_local_listen ?? tunnel.local_listen,
+        http_listen: tunnel.configured_http_listen ?? tunnel.http_listen,
         ssh_address: tunnel.ssh_address,
         remote_listen: tunnel.remote_listen,
         forward_address: tunnel.forward_address,
@@ -102,6 +104,7 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
       service_icon: values.service_icon || 'auto',
       direction: values.direction,
       local_listen: showLocal ? values.local_listen : undefined,
+      http_listen: direction === 'dynamic' ? values.http_listen : undefined,
       ssh_address: values.ssh_address,
       remote_listen: showRemote ? values.remote_listen : undefined,
       forward_address: showForward ? values.forward_address : undefined,
@@ -150,7 +153,10 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
             name="direction"
             label={<FieldLabel tip={tr("本地转发适合访问内网服务；远程转发适合对外暴露本机服务；动态代理提供通用 SOCKS5 出口。")}>{tr("转发类型")}</FieldLabel>}
           >
-            <Segmented className="direction-selector" options={directionOptions(tr)} block />
+            <Segmented className="direction-selector" options={directionOptions(tr)} block
+              onChange={(value) => {
+                if (value === 'dynamic' && !form.getFieldValue('local_listen')) form.setFieldValue('local_listen', 'auto')
+              }} />
           </Form.Item>
         </div>
 
@@ -182,10 +188,18 @@ export default function AddLineModal({ open, onClose, onSaved, tunnel }: Props) 
             {showLocal && (
               <Form.Item
                 name="local_listen"
-                label={<FieldLabel tip={direction === 'dynamic' ? tr("SOCKS5 客户端连接的本机地址。建议绑定 127.0.0.1，避免代理暴露给局域网。") : tr("本机程序连接的监听地址。使用 127.0.0.1 仅允许本机访问，0.0.0.0 会对局域网开放。")}>{direction === 'dynamic' ? tr("SOCKS5 本地监听") : tr("本地监听")}</FieldLabel>}
+                label={<FieldLabel tip={direction === 'dynamic' ? tr("SOCKS5 客户端连接的本机地址。填写 auto 会从 1080 起选择空闲端口并绑定 127.0.0.1。") : tr("本机程序连接的监听地址。使用 127.0.0.1 仅允许本机访问，0.0.0.0 会对局域网开放。")}>{direction === 'dynamic' ? tr("SOCKS5 本地监听") : tr("本地监听")}</FieldLabel>}
                 rules={[{ required: true, message: tr("请输入本地监听地址") }]}
               >
-                <Input placeholder={direction === 'dynamic' ? '127.0.0.1:1080' : '127.0.0.1:8080'} />
+                <Input placeholder={direction === 'dynamic' ? 'auto / 127.0.0.1:1080' : '127.0.0.1:8080'} />
+              </Form.Item>
+            )}
+            {direction === 'dynamic' && (
+              <Form.Item
+                name="http_listen"
+                label={<FieldLabel tip={tr("可选。填写 auto 会从 10800 起选择空闲端口并绑定 127.0.0.1；留空不开启 HTTP 代理。")}>{tr("HTTP 代理监听（可选）")}</FieldLabel>}
+              >
+                <Input placeholder="auto / 127.0.0.1:10800" />
               </Form.Item>
             )}
             {showRemote && (

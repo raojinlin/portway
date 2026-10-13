@@ -87,13 +87,16 @@ func TestMCPListAndSkillTools(t *testing.T) {
 	}
 }
 
-func TestMCPAuditLogsProtocolSuccessAndFailureWithoutArguments(t *testing.T) {
+func TestMCPAuditLogsProtocolAndRedactedArguments(t *testing.T) {
 	owner, _ := newTestServer(t)
 	var output bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	session := connectMCPTestClient(t, buildMCPServer(owner, MCPConfig{Access: "read"}, logger))
 	if _, err := session.ListTools(context.Background(), nil); err != nil {
 		t.Fatal(err)
+	}
+	if result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_tunnels", Arguments: map[string]any{"state": "running", "direction": "dynamic"}}); err != nil || result.IsError {
+		t.Fatalf("list_tunnels: %+v %v", result, err)
 	}
 	if result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "search_runtime_logs", Arguments: map[string]any{"query": "must-not-appear-in-audit"}}); err != nil || result.IsError {
 		t.Fatalf("search_runtime_logs: %+v %v", result, err)
@@ -112,7 +115,38 @@ func TestMCPAuditLogsProtocolSuccessAndFailureWithoutArguments(t *testing.T) {
 		}
 	}
 	if strings.Contains(logs, "must-not-appear-in-audit") {
-		t.Fatal("MCP audit log included tool arguments")
+		t.Fatal("MCP audit log included unredacted search text")
+	}
+	for _, want := range []string{`"arguments":{"direction":"dynamic","state":"running"}`,
+		`"arguments":{"query":"[REDACTED]"}`, `"arguments":{"name":"missing-line"}`} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("missing structured audit arguments %s in logs:\n%s", want, logs)
+		}
+	}
+}
+
+func TestMCPAuditArgumentsRejectSecretsAndUnknownFields(t *testing.T) {
+	params := &mcp.CallToolParamsRaw{Name: "create_tunnel", Arguments: json.RawMessage(`{
+		"name":"proxy", "direction":"dynamic", "local_listen":"auto", "http_listen":"auto",
+		"ssh_address":"gateway", "ssh_key_path":"/private/secret-key", "ssh_config_path":"/private/config",
+		"known_hosts_path":"/private/known", "ssh_password":"password-secret", "access_token":"token-secret",
+		"trust_new_host_key":true, "reconnect_delay":"3s"}`)}
+	request := &mcp.ServerRequest[*mcp.CallToolParamsRaw]{Params: params}
+	tool, tunnel, args := mcpAuditTarget(request)
+	if tool != "create_tunnel" || tunnel != "proxy" || args["local_listen"] != "auto" || args["trust_new_host_key"] != true {
+		t.Fatalf("audit target = %q, %q, %+v", tool, tunnel, args)
+	}
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"secret-key", "/private/config", "/private/known", "password-secret", "token-secret"} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("audit leaked secret %q: %s", secret, encoded)
+		}
+	}
+	if args["ssh_key_path"] != "[REDACTED]" || args["ssh_config_path"] != "[REDACTED]" || args["known_hosts_path"] != "[REDACTED]" {
+		t.Fatalf("paths not redacted: %s", encoded)
 	}
 }
 

@@ -1,13 +1,17 @@
 export type ProxyShell = 'posix' | 'powershell' | 'url'
 
-export function proxyURL(listen: string): string {
+export function proxyURL(listen: string, scheme: 'socks5h' | 'http' = 'socks5h'): string {
   // Only accept host:port, never shell syntax or URL credentials from a saved address.
   const match = /^(\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9._-]*):(\d+)$/.exec(listen.trim())
-  if (!match || Number(match[2]) < 1 || Number(match[2]) > 65535) throw new Error('Invalid SOCKS5 listen address')
+  if (!match || Number(match[2]) < 1 || Number(match[2]) > 65535) throw new Error('Invalid proxy listen address')
   let host = match[1]
   if (!host || host === '0.0.0.0') host = '127.0.0.1'
   if (host === '[::]') host = '[::1]'
-  return `socks5h://${host}:${Number(match[2])}`
+  return `${scheme}://${host}:${Number(match[2])}`
+}
+
+export function preferredProxyURL(socksListen: string, httpListen?: string): string {
+  return httpListen ? proxyURL(httpListen, 'http') : proxyURL(socksListen)
 }
 
 export function proxyCommand(url: string, shell: ProxyShell): string {

@@ -1,3 +1,6 @@
+const english = document.documentElement?.lang === 'en'
+const translated = (zh, en) => english ? en : zh
+
 const modes = {
   local: {
     kicker: 'LOCAL FORWARDING', number: '01', title: '从本机连接内网数据库',
@@ -18,6 +21,26 @@ const modes = {
     command: 'ssh -D 127.0.0.1:1080 gateway', note: '支持 TCP CONNECT，不支持 UDP。建议仅监听回环地址。',
   },
 }
+if (english) Object.assign(modes, {
+  local: {
+    kicker: 'LOCAL FORWARDING', number: '01', title: 'Reach a private database from your computer',
+    description: 'A local database client connects to 127.0.0.1:15432; the SSH server forwards it to db:5432.',
+    from: 'Your computer', fromAddress: '127.0.0.1:15432', gateway: 'jump', to: 'Private database', toAddress: 'db:5432',
+    command: 'ssh -L 15432:db:5432 jump', note: 'Save a tunnel to start or stop it. Addresses are illustrative.',
+  },
+  remote: {
+    kicker: 'REMOTE FORWARDING', number: '02', title: 'Reach a local development service from the remote host',
+    description: 'The SSH server listens on 127.0.0.1:9000 and forwards connections to localhost:3000 on your computer.',
+    from: 'Remote listener', fromAddress: '127.0.0.1:9000', gateway: 'dev-box', to: 'Local service', toAddress: 'localhost:3000',
+    command: 'ssh -R 9000:localhost:3000 dev-box', note: 'Public access also requires GatewayPorts and firewall settings; this example listens on remote loopback only.',
+  },
+  socks: {
+    kicker: 'DYNAMIC FORWARDING', number: '03', title: 'Reach different destinations through SOCKS5',
+    description: 'A browser or terminal connects to the local proxy port. The client chooses the destination, and traffic exits through the SSH server.',
+    from: 'Local proxy', fromAddress: '127.0.0.1:1080', gateway: 'gateway', to: 'Destination', toAddress: 'Chosen by client',
+    command: 'ssh -D 127.0.0.1:1080 gateway', note: 'Supports TCP CONNECT, not UDP. Binding to loopback is recommended.',
+  },
+})
 
 function setText(id, value) { document.getElementById(id).textContent = value }
 
@@ -51,17 +74,17 @@ const proxyToggle = document.getElementById('proxy-toggle')
 function toggleProxy() {
   const stopped = proxyToggle.getAttribute('aria-pressed') !== 'true'
   proxyToggle.setAttribute('aria-pressed', String(stopped))
-  proxyToggle.textContent = stopped ? '▶ 启动线路' : '■ 停止线路'
+  proxyToggle.textContent = stopped ? translated('▶ 启动线路', '▶ Start tunnel') : translated('■ 停止线路', '■ Stop tunnel')
   document.getElementById('proxy-line').classList.toggle('is-stopped', stopped)
-  document.getElementById('proxy-dot').setAttribute('aria-label', stopped ? '已停止' : '运行中')
-  setText('proxy-status', stopped ? '已停止 · 配置保留' : '运行中')
+  document.getElementById('proxy-dot').setAttribute('aria-label', stopped ? translated('已停止', 'Stopped') : translated('运行中', 'Running'))
+  setText('proxy-status', stopped ? translated('已停止 · 配置保留', 'Stopped · configuration saved') : translated('运行中', 'Running'))
   setText('running-count', stopped ? '2' : '3')
-  setText('menubar-proxy-toggle', stopped ? '▶ 启动线路' : '■ 停止线路')
-  setText('menubar-proxy-rate', stopped ? '已停止' : '244 KB/s')
+  setText('menubar-proxy-toggle', stopped ? translated('▶ 启动线路', '▶ Start tunnel') : translated('■ 停止线路', '■ Stop tunnel'))
+  setText('menubar-proxy-rate', stopped ? translated('已停止', 'Stopped') : '244 KB/s')
   document.getElementById('menubar-proxy-dot').classList.toggle('is-stopped', stopped)
-  document.getElementById('menubar-proxy-dot').setAttribute('aria-label', stopped ? '已停止' : '运行中')
+  document.getElementById('menubar-proxy-dot').setAttribute('aria-label', stopped ? translated('已停止', 'Stopped') : translated('运行中', 'Running'))
   document.getElementById('menubar-copy-proxy').hidden = stopped
-  setText('menubar-feedback', stopped ? '示例线路已停止，配置保留。' : '示例线路已启动。')
+  setText('menubar-feedback', stopped ? translated('示例线路已停止，配置保留。', 'Sample tunnel stopped; configuration saved.') : translated('示例线路已启动。', 'Sample tunnel started.'))
 }
 proxyToggle.addEventListener('click', toggleProxy)
 document.getElementById('menubar-proxy-toggle').addEventListener('click', toggleProxy)
@@ -90,9 +113,9 @@ async function copyProxy(event, feedback) {
   button.disabled = true
   try {
     await navigator.clipboard.writeText(proxyCommand)
-    setText(feedback, '已复制示例。使用前请确认本机 1080 端口已运行代理。')
+    setText(feedback, translated('已复制示例。使用前请确认本机 1080 端口已运行代理。', 'Example copied. Before use, confirm a proxy is running on local port 1080.'))
   } catch {
-    setText(feedback, `无法访问剪贴板，请手动复制：${proxyCommand}`)
+    setText(feedback, `${translated('无法访问剪贴板，请手动复制：', 'Clipboard unavailable. Copy manually: ')}${proxyCommand}`)
   } finally { button.disabled = false }
 }
 document.getElementById('copy-proxy').addEventListener('click', (event) => copyProxy(event, 'copy-feedback'))
@@ -109,6 +132,17 @@ const platforms = {
     description: 'Ubuntu 推荐安装 DEB 包。其他发行版可使用 tar.gz，需自行安装 GTK3、WebKitGTK 4.1。',
     warning: '当前构建以 Ubuntu 24.04 为目标，不保证兼容所有发行版。Linux 暂无托盘入口。' },
 }
+if (english) Object.assign(platforms, {
+  mac: { title: 'macOS', support: '12+ · Apple Silicon and Intel',
+    description: 'Open the DMG or extract the ZIP, drag Portway.app into Applications, and open it from there.',
+    warning: 'The current macOS package is not notarized, so macOS may warn about an unknown developer. Verify the download source.' },
+  windows: { title: 'Windows', support: 'Windows 10 / 11 · x64',
+    description: 'Run the installer or use the standalone EXE. WebView2 is required; installation is offered if it is missing.',
+    warning: 'The current Windows package is not Authenticode signed, so Windows may show a reputation warning. Verify the download source.' },
+  linux: { title: 'Linux', support: 'Ubuntu 24.04 · x64',
+    description: 'Install the DEB on Ubuntu. Other distributions can use the tar.gz with GTK3 and WebKitGTK 4.1 installed separately.',
+    warning: 'The current build targets Ubuntu 24.04 and may not work on every distribution. Linux has no tray entry yet.' },
+})
 function selectOS(key) {
   const platform = platforms[key]
   document.querySelectorAll('[data-os]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.os === key)))

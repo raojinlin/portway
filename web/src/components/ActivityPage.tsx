@@ -58,7 +58,7 @@ export default function ActivityPage({ tunnels, onConfigClick }: { tunnels: Tunn
     </div>
     <div className="activity-panel">
       <Tabs activeKey={kind} onChange={value => { setKind(value as Kind); setFilter('') }} items={[
-        { key: 'logs', label: tr('运行日志') }, { key: 'active', label: tr('当前连接') }, { key: 'history', label: tr('SOCKS5 历史') },
+        { key: 'logs', label: tr('运行日志') }, { key: 'active', label: tr('当前连接') }, { key: 'history', label: tr('动态代理历史') },
       ]} />
       <div className="activity-filters">
         <Select className="activity-tunnel-filter" aria-label={tr('筛选线路')} value={tunnel} onChange={setTunnel} showSearch optionFilterProp="label"
@@ -86,7 +86,7 @@ export default function ActivityPage({ tunnels, onConfigClick }: { tunnels: Tunn
           loading={loading && !data} pagination={pagination} scroll={{ x: kind === 'history' ? 1795 : 1315 }} locale={{ emptyText: tr(error ? '读取失败，请重试' : '没有匹配的连接记录') }} />}
       <div className="activity-footnote">
         {kind === 'logs' ? <><span>{tr('点击日志行展开原始内容。仅查看日志，不会修改文件。')}</span>{logs?.path && <code>{logs.path}</code>}</>
-          : <span>{tr(kind === 'history' ? '历史仅包含 SOCKS5 请求，每条线路保留最近 500 条缓存；单次请求失败不代表线路异常。' : '当前连接包含所有转发类型，不包含 SSH 控制连接；来源地址固定在左侧。')}
+          : <span>{tr(kind === 'history' ? '历史仅包含动态代理请求，每条线路保留最近 500 条缓存；单次请求失败不代表线路异常。' : '当前连接包含所有转发类型，不包含 SSH 控制连接；来源地址固定在左侧。')}
             {kind === 'history' && connections && !connections.persisted && tr('当前未启用日志持久化，记录仅在本次线路运行期间保留。')}</span>}
       </div>
     </div>

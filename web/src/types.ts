@@ -23,6 +23,9 @@ export interface TunnelView {
   enabled: boolean
   direction: Direction
   local_listen: string
+  http_listen: string
+  configured_local_listen: string
+  configured_http_listen: string
   ssh_address: string
   ssh_user: string
   ssh_key_path: string
@@ -41,6 +44,7 @@ export interface TunnelRequest {
   name: string
   direction?: Direction
   local_listen?: string
+  http_listen?: string
   ssh_address: string
   ssh_user?: string
   ssh_key_path?: string

@@ -103,7 +103,8 @@ func addCmd(args []string) {
 	addr := addrFlag(fs)
 	name := fs.String("name", "", "tunnel name")
 	direction := fs.String("direction", "local", "forwarding direction: local (-L), remote (-R), or dynamic (-D, SOCKS5)")
-	local := fs.String("local", "", "local listen address (host:port); used by local and dynamic")
+	local := fs.String("local", "", "local listen address (host:port); dynamic also accepts auto (first free port >=1080)")
+	httpListen := fs.String("http-listen", "", "optional HTTP proxy listen address (host:port or auto, first free port >=10800); dynamic only")
 	sshAddr := fs.String("ssh", "", "ssh server address or ssh config host")
 	sshCfg := fs.String("ssh-config", "", "path to ssh config (default ~/.ssh/config)")
 	user := fs.String("user", "", "ssh username (default: ssh config User, then local user)")
@@ -122,6 +123,7 @@ func addCmd(args []string) {
 		Name:                     *name,
 		Direction:                *direction,
 		LocalListen:              *local,
+		HTTPListen:               *httpListen,
 		SSHAddress:               *sshAddr,
 		SSHConfigPath:            *sshCfg,
 		SSHUser:                  *user,
@@ -153,7 +155,14 @@ func listCmd(args []string) {
 		fail(err)
 	}
 	for _, v := range views {
-		fmt.Printf("%s\t%s\tbytes_in=%d bytes_out=%d last_err=%s\n", v.Name, v.State, v.BytesIn, v.BytesOut, v.LastError)
+		fmt.Printf("%s\t%s\tbytes_in=%d bytes_out=%d last_err=%s", v.Name, v.State, v.BytesIn, v.BytesOut, v.LastError)
+		if v.Direction == "dynamic" {
+			fmt.Printf(" socks=%s", v.LocalListen)
+			if v.HTTPListen != "" {
+				fmt.Printf(" http=%s", v.HTTPListen)
+			}
+		}
+		fmt.Println()
 	}
 }
 
@@ -170,7 +179,14 @@ func statusCmd(args []string) {
 	if err != nil {
 		fail(err)
 	}
-	fmt.Printf("%s\t%s\tbytes_in=%d bytes_out=%d conns=%d last_err=%s\n", v.Name, v.State, v.BytesIn, v.BytesOut, v.ActiveConns, v.LastError)
+	fmt.Printf("%s\t%s\tbytes_in=%d bytes_out=%d conns=%d last_err=%s", v.Name, v.State, v.BytesIn, v.BytesOut, v.ActiveConns, v.LastError)
+	if v.Direction == "dynamic" {
+		fmt.Printf(" socks=%s", v.LocalListen)
+		if v.HTTPListen != "" {
+			fmt.Printf(" http=%s", v.HTTPListen)
+		}
+	}
+	fmt.Println()
 }
 
 func rmCmd(args []string) {
@@ -232,7 +248,8 @@ func usage() {
 	fmt.Println("add flags:")
 	fmt.Println("  --name <name>")
 	fmt.Println("  --direction <local|remote|dynamic>   local=-L (default), remote=-R, dynamic=-D (SOCKS5)")
-	fmt.Println("  --local <host:port>      local listen address; local & dynamic")
+	fmt.Println("  --local <host:port|auto> local listen address; auto for dynamic starts at port 1080")
+	fmt.Println("  --http-listen <host:port|auto> optional HTTP proxy listener; auto starts at port 10800")
 	fmt.Println("  --ssh <host:port or ssh-config alias>")
 	fmt.Println("  --ssh-config <path>")
 	fmt.Println("  --user <ssh user>")
