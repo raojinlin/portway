@@ -307,6 +307,8 @@
   "编辑": "Edit",
   "停止失败": "Stop failed",
   "停止": "Stop",
+  "重启失败": "Restart failed",
+  "重启": "Restart",
   "启动失败": "Start failed",
   "启动": "Start",
   "更多操作": "More actions",

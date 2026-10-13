@@ -21,6 +21,8 @@ import (
 
 var events = make(chan int, 8)
 var tunnelEvents = make(chan TunnelAction, 8)
+var restartEvents = make(chan string, 8)
+var wakeEvents = make(chan struct{}, 1)
 
 type connectionEvent struct {
 	name    string
@@ -52,6 +54,22 @@ func stmMenuAction(action C.int) {
 func stmTunnelAction(name *C.char, enabled C.int) {
 	select {
 	case tunnelEvents <- TunnelAction{Name: C.GoString(name), Enabled: enabled != 0}:
+	default:
+	}
+}
+
+//export stmRestartAction
+func stmRestartAction(name *C.char) {
+	select {
+	case restartEvents <- C.GoString(name):
+	default:
+	}
+}
+
+//export stmWakeAction
+func stmWakeAction() {
+	select {
+	case wakeEvents <- struct{}{}:
 	default:
 	}
 }
@@ -102,6 +120,14 @@ func Start(title string, actions TrayActions) error {
 				case action := <-tunnelEvents:
 					if actions.SetEnabled != nil {
 						go actions.SetEnabled(action.Name, action.Enabled)
+					}
+				case name := <-restartEvents:
+					if actions.Restart != nil {
+						go actions.Restart(name)
+					}
+				case <-wakeEvents:
+					if actions.Wake != nil {
+						go actions.Wake()
 					}
 				case action := <-connectionEvents:
 					if actions.Connections != nil {

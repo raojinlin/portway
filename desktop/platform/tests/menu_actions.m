@@ -4,6 +4,7 @@
 static NSString *lastName;
 static BOOL lastEnabled;
 static BOOL lastHistory;
+static BOOL restarted;
 void stmConnectionsAction(const char *name, int history) {
     lastName = [NSString stringWithUTF8String:name];
     lastHistory = history != 0;
@@ -13,6 +14,11 @@ void stmTunnelAction(const char *name, int enabled) {
     lastName = [NSString stringWithUTF8String:name];
     lastEnabled = enabled != 0;
 }
+void stmRestartAction(const char *name) {
+    lastName = [NSString stringWithUTF8String:name];
+    restarted = YES;
+}
+void stmWakeAction(void) {}
 
 int main(void) {
     @autoreleasepool {
@@ -20,16 +26,18 @@ int main(void) {
         NSMenu *menu = [NSMenu new];
         menu.autoenablesItems = NO;
         [menu addItem:[[NSMenuItem alloc] initWithTitle:@"Details" action:nil keyEquivalent:@""]];
-        NSDictionary *labels = @{@"startTunnel": @"Start Tunnel", @"stopTunnel": @"Stop Tunnel", @"working": @"Working...",
+        NSDictionary *labels = @{@"startTunnel": @"Start Tunnel", @"stopTunnel": @"Stop Tunnel", @"restartTunnel": @"Restart Tunnel", @"working": @"Working...",
             @"copyProxy": @"Copy Proxy URL", @"copyCommand": @"Copy Proxy Command", @"connections": @"View Connections"};
         NSMutableDictionary *line = [@{@"name": @"line / test", @"enabled": @NO, @"busy": @NO} mutableCopy];
         stmUpdateLineActions(menu, line, labels);
-        assert(menu.numberOfItems == 4);
-        NSMenuItem *connections = [menu itemAtIndex:3];
+        assert(menu.numberOfItems == 5);
+        NSMenuItem *connections = [menu itemAtIndex:4];
         assert(connections.enabled && connections.image != nil && [connections.title isEqualToString:@"View Connections"]);
         [menuTarget viewConnections:connections];
         assert([lastName isEqualToString:line[@"name"]] && !lastHistory);
         NSMenuItem *toggle = [menu itemAtIndex:2];
+        NSMenuItem *restart = [menu itemAtIndex:3];
+        assert([restart.title isEqualToString:@"Restart Tunnel"] && !restart.enabled);
         assert([toggle.title isEqualToString:@"Start Tunnel"] && [toggle.toolTip isEqualToString:@"Start Tunnel"] && toggle.enabled && toggle.image != nil);
         assert([toggle.accessibilityLabel isEqualToString:@"Start Tunnel"]);
         [menuTarget setTunnel:toggle];
@@ -40,25 +48,29 @@ int main(void) {
         line[@"proxyURL"] = @"socks5h://127.0.0.1:1080";
         line[@"proxyCommand"] = @"export ALL_PROXY='socks5h://127.0.0.1:1080'";
         stmUpdateLineActions(menu, line, labels);
-        assert(menu.numberOfItems == 6);
+        assert(menu.numberOfItems == 7);
+        assert(restart.enabled && restart.image != nil);
+        [menuTarget restartTunnel:restart];
+        assert(restarted && [lastName isEqualToString:line[@"name"]] && !restart.enabled);
         [menuTarget viewConnections:connections];
         assert(lastHistory);
         assert([toggle.title isEqualToString:@"Stop Tunnel"] && [toggle.toolTip isEqualToString:@"Stop Tunnel"] && toggle.enabled && toggle.image != nil);
-        assert([menu itemAtIndex:4].image != nil && [[menu itemAtIndex:4].title isEqualToString:@"Copy Proxy URL"]);
-        assert([menu itemAtIndex:5].image != nil && [[menu itemAtIndex:5].title isEqualToString:@"Copy Proxy Command"]);
-        assert([[[menu itemAtIndex:4] representedObject] isEqual:line[@"proxyURL"]]);
+        assert([menu itemAtIndex:5].image != nil && [[menu itemAtIndex:5].title isEqualToString:@"Copy Proxy URL"]);
+        assert([menu itemAtIndex:6].image != nil && [[menu itemAtIndex:6].title isEqualToString:@"Copy Proxy Command"]);
+        assert([[[menu itemAtIndex:5] representedObject] isEqual:line[@"proxyURL"]]);
         [menuTarget setTunnel:toggle];
         assert(!lastEnabled);
 
         line[@"busy"] = @YES;
         stmUpdateLineActions(menu, line, labels);
         assert([toggle.title isEqualToString:@"Working..."] && !toggle.enabled && toggle.image != nil);
+        assert(!restart.enabled);
         line[@"busy"] = @NO;
         line[@"enabled"] = @NO;
         [line removeObjectForKey:@"proxyURL"];
         [line removeObjectForKey:@"proxyCommand"];
         stmUpdateLineActions(menu, line, labels);
-        assert(menu.numberOfItems == 4 && [toggle.toolTip isEqualToString:@"Start Tunnel"]);
+        assert(menu.numberOfItems == 5 && [toggle.toolTip isEqualToString:@"Start Tunnel"] && !restart.enabled);
         [menuTarget viewConnections:connections];
         assert(connections.enabled && lastHistory);
 
@@ -78,7 +90,7 @@ int main(void) {
                 valueX = value.frame.origin.x;
             }
         }
-        puts("Menu actions: start, stop, busy and proxy visibility OK.");
+        puts("Menu actions: start, stop, restart, busy and proxy visibility OK.");
     }
     return 0;
 }

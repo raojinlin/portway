@@ -6,6 +6,7 @@ import {
   EditOutlined,
   MoreOutlined,
   PauseOutlined,
+  ReloadOutlined,
   RightOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
@@ -64,7 +65,8 @@ export default function LineRow({ tunnel: t, onChanged, onEdit }: Props) {
   const DIRECTION_LABEL = directionLabels(tr)
   const [proxyOpen, setProxyOpen] = useState(false)
   const { message, modal } = AntApp.useApp()
-  const [busy, setBusy] = useState(false)
+  const [busyAction, setBusyAction] = useState<'start' | 'stop' | 'restart' | 'delete' | null>(null)
+  const busy = busyAction !== null
   const [errorOpen, setErrorOpen] = useState(false)
   const [connectionsOpen, setConnectionsOpen] = useState(false)
   const [hasTraffic, setHasTraffic] = useState(false)
@@ -95,15 +97,15 @@ export default function LineRow({ tunnel: t, onChanged, onEdit }: Props) {
 
   const trafficActive = hasTraffic && t.enabled && status === 'running'
 
-  async function run(action: () => Promise<unknown>, failMsg: string) {
-    setBusy(true)
+  async function run(action: () => Promise<unknown>, failMsg: string, actionName: NonNullable<typeof busyAction>) {
+    setBusyAction(actionName)
     try {
       await action()
       onChanged()
     } catch (err) {
       message.error(`${failMsg}：${(err as Error).message}`)
     } finally {
-      setBusy(false)
+      setBusyAction(null)
     }
   }
 
@@ -119,7 +121,7 @@ export default function LineRow({ tunnel: t, onChanged, onEdit }: Props) {
         okText: tr("删除"),
         cancelText: tr("取消"),
         okButtonProps: { danger: true },
-        onOk: () => run(() => api.remove(t.Name), tr("删除失败")),
+        onOk: () => run(() => api.remove(t.Name), tr("删除失败"), 'delete'),
       })
     }
   }
@@ -163,9 +165,12 @@ export default function LineRow({ tunnel: t, onChanged, onEdit }: Props) {
           </Tooltip>}
           <Button type="text" icon={<EditOutlined />} disabled={busy} onClick={() => onEdit(t)}>{tr("编辑")}</Button>
           {t.enabled ? (
-            <Button icon={<PauseOutlined />} loading={busy} onClick={() => run(() => api.stop(t.Name), tr("停止失败"))}>{tr("停止")}</Button>
+            <>
+              <Button icon={<ReloadOutlined />} loading={busyAction === 'restart'} disabled={busy && busyAction !== 'restart'} onClick={() => run(() => api.restart(t.Name), tr("重启失败"), 'restart')}>{tr("重启")}</Button>
+              <Button icon={<PauseOutlined />} loading={busyAction === 'stop'} disabled={busy && busyAction !== 'stop'} onClick={() => run(() => api.stop(t.Name), tr("停止失败"), 'stop')}>{tr("停止")}</Button>
+            </>
           ) : (
-            <Button type="primary" icon={<CaretRightOutlined />} loading={busy} onClick={() => run(() => api.start(t.Name), tr("启动失败"))}>{tr("启动")}</Button>
+            <Button type="primary" icon={<CaretRightOutlined />} loading={busyAction === 'start'} disabled={busy && busyAction !== 'start'} onClick={() => run(() => api.start(t.Name), tr("启动失败"), 'start')}>{tr("启动")}</Button>
           )}
           <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} trigger={['click']} placement="bottomRight">
             <Button icon={<MoreOutlined />} disabled={busy} aria-label={tr("更多操作")} />

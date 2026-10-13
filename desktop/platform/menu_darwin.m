@@ -3,6 +3,8 @@
 
 extern void stmMenuAction(int action);
 extern void stmTunnelAction(const char *name, int enabled);
+extern void stmRestartAction(const char *name);
+extern void stmWakeAction(void);
 extern void stmConnectionsAction(const char *name, int history);
 
 @interface STMMenuTarget : NSObject
@@ -12,6 +14,7 @@ extern void stmConnectionsAction(const char *name, int history);
 - (void)showAbout:(id)sender;
 - (void)copyProxy:(NSMenuItem *)sender;
 - (void)setTunnel:(NSMenuItem *)sender;
+- (void)restartTunnel:(NSMenuItem *)sender;
 - (void)viewConnections:(NSMenuItem *)sender;
 @end
 
@@ -27,6 +30,12 @@ extern void stmConnectionsAction(const char *name, int history);
     if (![action isKindOfClass:NSDictionary.class] || ![action[@"name"] isKindOfClass:NSString.class]) return;
     sender.enabled = NO;
     stmTunnelAction([action[@"name"] UTF8String], [action[@"enabled"] boolValue]);
+}
+- (void)restartTunnel:(NSMenuItem *)sender {
+    NSString *name = sender.representedObject;
+    if (![name isKindOfClass:NSString.class]) return;
+    sender.enabled = NO;
+    stmRestartAction(name.UTF8String);
 }
 - (void)copyProxy:(NSMenuItem *)sender {
     NSString *text = sender.representedObject;
@@ -56,6 +65,7 @@ static NSMenuItem *mcpToggleItem;
 static NSMutableDictionary<NSString *, NSMenuItem *> *lineItems;
 static NSMutableDictionary<NSString *, NSImage *> *stateImages;
 static NSString *trayName;
+static id wakeObserver;
 
 int stmSystemChinese(void) {
     @autoreleasepool {
@@ -348,6 +358,9 @@ int stmTrayStart(const char *value) {
         statusItem.button.title = @"";
         statusItem.button.imagePosition = NSImageOnly;
         statusItem.button.imageScaling = NSImageScaleNone;
+        wakeObserver = [NSWorkspace.sharedWorkspace.notificationCenter addObserverForName:NSWorkspaceDidWakeNotification object:nil queue:nil usingBlock:^(NSNotification *notification) {
+            stmWakeAction();
+        }];
         stmUpdateStatusText(@"--\n--");
         NSMenu *menu = [NSMenu new];
         menu.autoenablesItems = NO;
@@ -398,6 +411,9 @@ static void stmUpdateLineActions(NSMenu *menu, NSDictionary *line, NSDictionary 
         NSMenuItem *toggle = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(setTunnel:) keyEquivalent:@""];
         toggle.target = menuTarget;
         [menu addItem:toggle];
+        NSMenuItem *restart = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(restartTunnel:) keyEquivalent:@""];
+        restart.target = menuTarget;
+        [menu addItem:restart];
         NSMenuItem *connections = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(viewConnections:) keyEquivalent:@""];
         connections.target = menuTarget;
         [menu addItem:connections];
@@ -414,7 +430,14 @@ static void stmUpdateLineActions(NSMenu *menu, NSDictionary *line, NSDictionary 
     if (@available(macOS 11.0, *)) {
         toggle.image = [NSImage imageWithSystemSymbolName:busy ? @"hourglass" : enabled ? @"stop.fill" : @"play.fill" accessibilityDescription:actionLabel];
     }
-    NSMenuItem *connections = [menu itemAtIndex:3];
+    NSMenuItem *restart = [menu itemAtIndex:3];
+    restart.title = labels[@"restartTunnel"];
+    restart.toolTip = restart.title;
+    restart.accessibilityLabel = restart.title;
+    restart.representedObject = line[@"name"];
+    restart.enabled = enabled && !busy;
+    if (@available(macOS 11.0, *)) restart.image = [NSImage imageWithSystemSymbolName:@"arrow.clockwise" accessibilityDescription:restart.title];
+    NSMenuItem *connections = [menu itemAtIndex:4];
     connections.title = labels[@"connections"];
     connections.representedObject = @{@"name": line[@"name"], @"showHistory": @([line[@"showHistory"] boolValue])};
     connections.enabled = YES;
@@ -425,20 +448,20 @@ static void stmUpdateLineActions(NSMenu *menu, NSDictionary *line, NSDictionary 
     NSString *proxyURL = line[@"proxyURL"];
     BOOL hasProxy = [proxyURL isKindOfClass:NSString.class] && proxyURL.length > 0;
     if (!hasProxy) {
-        while (menu.numberOfItems > 4) [menu removeItemAtIndex:4];
+        while (menu.numberOfItems > 5) [menu removeItemAtIndex:5];
     } else {
-        if (menu.numberOfItems == 4) {
+        if (menu.numberOfItems == 5) {
             for (NSInteger i = 0; i < 2; i++) {
                 NSMenuItem *copy = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(copyProxy:) keyEquivalent:@""];
                 copy.target = menuTarget;
                 [menu addItem:copy];
             }
         }
-        NSMenuItem *copyURL = [menu itemAtIndex:4];
+        NSMenuItem *copyURL = [menu itemAtIndex:5];
         copyURL.title = labels[@"copyProxy"];
         copyURL.representedObject = proxyURL;
         copyURL.toolTip = proxyURL;
-        NSMenuItem *copyCommand = [menu itemAtIndex:5];
+        NSMenuItem *copyCommand = [menu itemAtIndex:6];
         copyCommand.title = labels[@"copyCommand"];
         copyCommand.representedObject = line[@"proxyCommand"];
         copyCommand.toolTip = line[@"proxyCommand"];
@@ -533,6 +556,8 @@ void stmTrayUpdate(const char *value) {
 
 void stmTrayStop(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (wakeObserver != nil) [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:wakeObserver];
+        wakeObserver = nil;
         if (statusItem != nil) [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
         statusItem = nil;
         traySymbol = nil;

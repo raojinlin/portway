@@ -26,6 +26,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/tunnels/{name}", s.handleDelete)
 	mux.HandleFunc("POST /api/tunnels/{name}/start", s.handleStart)
 	mux.HandleFunc("POST /api/tunnels/{name}/stop", s.handleStop)
+	mux.HandleFunc("POST /api/tunnels/{name}/restart", s.handleRestart)
 
 	mux.Handle("/", webUIHandler())
 
@@ -169,6 +170,37 @@ func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	s.handleSetEnabled(w, r, true)
+}
+
+func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
+	v, status, err := s.restartTunnel(r.PathValue("name"))
+	if err != nil {
+		writeError(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *Server) restartTunnel(name string) (TunnelView, int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, exists := s.state.Tunnels[name]
+	if !exists {
+		return TunnelView{}, http.StatusNotFound, fmt.Errorf("tunnel %q not found", name)
+	}
+	if !entry.Enabled {
+		return TunnelView{}, http.StatusConflict, fmt.Errorf("tunnel %q is stopped", name)
+	}
+	if _, running := s.manager.Status(name); running {
+		if err := s.manager.Remove(name); err != nil {
+			return TunnelView{}, http.StatusInternalServerError, fmt.Errorf("stop tunnel: %w", err)
+		}
+	}
+	if err := s.manager.Add(s.tunnelContext(), entry.Config); err != nil {
+		return TunnelView{}, http.StatusInternalServerError, fmt.Errorf("restart tunnel: %w", err)
+	}
+	v, _ := s.viewLocked(name)
+	return v, http.StatusOK, nil
 }
 
 func (s *Server) handleSetEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {

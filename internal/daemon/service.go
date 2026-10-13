@@ -262,6 +262,22 @@ func (s *Service) SetTunnelEnabled(name string, enabled bool) error {
 	return err
 }
 
+// RestartTunnel replaces an enabled tunnel instance without changing its saved state.
+func (s *Service) RestartTunnel(name string) error {
+	s.requests.RLock()
+	defer s.requests.RUnlock()
+	if s.closing.Load() {
+		return errors.New("backend is stopping")
+	}
+	_, _, err := s.server.restartTunnel(name)
+	if err != nil {
+		s.logger.Warn("desktop tunnel restart failed", "tunnel", name, "error", logging.SafeError(err))
+	} else {
+		s.logger.Info("desktop tunnel restarted", "tunnel", name)
+	}
+	return err
+}
+
 func (s *Service) Summary() (running, failed int) {
 	for _, status := range s.server.manager.List() {
 		if status.State == "running" {

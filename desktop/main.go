@@ -285,20 +285,10 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 		},
 		Connections: a.openConnections,
 		SetEnabled: func(name string, enabled bool) {
-			if err := a.changeTunnel(name, enabled); err != nil {
-				a.mu.RLock()
-				language := a.language
-				a.mu.RUnlock()
-				select {
-				case <-a.done:
-					return
-				default:
-				}
-				_, _ = wruntime.MessageDialog(ctx, wruntime.MessageDialogOptions{Type: wruntime.ErrorDialog,
-					Title: trayText(language, "线路操作失败", "Tunnel action failed"), Message: name + "\n\n" + err.Error(),
-					Buttons: []string{trayText(language, "好", "OK")}})
-			}
+			a.reportTunnelAction(ctx, name, a.changeTunnel(name, enabled))
 		},
+		Restart: func(name string) { a.reportTunnelAction(ctx, name, a.restartTunnel(name)) },
+		Wake:    a.restartAfterWake,
 		Copy: func(text string) {
 			if err := wruntime.ClipboardSetText(ctx, text); err != nil {
 				service.Logger().Warn("clipboard write failed", "error", err)
@@ -337,6 +327,14 @@ func (a *application) setupWindow(ctx context.Context, menus nativeMenus) error 
 }
 
 func (a *application) changeTunnel(name string, enabled bool) error {
+	return a.performTunnelAction(name, func(service *daemon.Service) error { return service.SetTunnelEnabled(name, enabled) })
+}
+
+func (a *application) restartTunnel(name string) error {
+	return a.performTunnelAction(name, func(service *daemon.Service) error { return service.RestartTunnel(name) })
+}
+
+func (a *application) performTunnelAction(name string, action func(*daemon.Service) error) error {
 	a.mu.Lock()
 	if a.trayPending[name] {
 		a.mu.Unlock()
@@ -366,7 +364,40 @@ func (a *application) changeTunnel(name string, enabled bool) error {
 		a.mu.Unlock()
 		notify()
 	}()
-	return service.SetTunnelEnabled(name, enabled)
+	return action(service)
+}
+
+func (a *application) restartAfterWake() {
+	a.mu.RLock()
+	service := a.service
+	a.mu.RUnlock()
+	if service == nil {
+		return
+	}
+	for _, line := range service.TunnelViews() {
+		if line.Enabled {
+			if err := a.restartTunnel(line.Name); err != nil {
+				service.Logger().Warn("wake tunnel restart failed", "tunnel", line.Name, "error", err)
+			}
+		}
+	}
+}
+
+func (a *application) reportTunnelAction(ctx context.Context, name string, err error) {
+	if err == nil {
+		return
+	}
+	a.mu.RLock()
+	language := a.language
+	a.mu.RUnlock()
+	select {
+	case <-a.done:
+		return
+	default:
+	}
+	_, _ = wruntime.MessageDialog(ctx, wruntime.MessageDialogOptions{Type: wruntime.ErrorDialog,
+		Title: trayText(language, "线路操作失败", "Tunnel action failed"), Message: name + "\n\n" + err.Error(),
+		Buttons: []string{trayText(language, "好", "OK")}})
 }
 
 func (a *application) shutdown(context.Context) {

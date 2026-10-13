@@ -26,7 +26,7 @@ func TestMenuLanguagesCoverSameActions(t *testing.T) {
 	if zh["startMCP"] != "启动 MCP" || zh["stopMCP"] != "停止 MCP" || en["startMCP"] != "Start MCP" || en["stopMCP"] != "Stop MCP" {
 		t.Fatal("missing MCP toggle translations")
 	}
-	if zh["startTunnel"] != "启动线路" || zh["stopTunnel"] != "停止线路" || en["startTunnel"] != "Start Tunnel" || en["stopTunnel"] != "Stop Tunnel" || en["working"] != "Working..." {
+	if zh["startTunnel"] != "启动线路" || zh["stopTunnel"] != "停止线路" || zh["restartTunnel"] != "重启线路" || en["startTunnel"] != "Start Tunnel" || en["stopTunnel"] != "Stop Tunnel" || en["restartTunnel"] != "Restart Tunnel" || en["working"] != "Working..." {
 		t.Fatal("missing tunnel control translations")
 	}
 }

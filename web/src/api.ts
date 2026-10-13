@@ -71,4 +71,7 @@ export const api = {
 
   stop: (name: string) =>
     request<TunnelView>(`/api/tunnels/${encodeURIComponent(name)}/stop`, { method: 'POST' }),
+
+  restart: (name: string) =>
+    request<TunnelView>(`/api/tunnels/${encodeURIComponent(name)}/restart`, { method: 'POST' }),
 }

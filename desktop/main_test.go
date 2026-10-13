@@ -25,7 +25,7 @@ func TestNativeMenusStartWithoutDOMReady(t *testing.T) {
 	updates := make(chan platform.TraySnapshot, 1)
 	err := a.startDesktop(context.Background(), nativeMenus{
 		start: func(title string, actions platform.TrayActions) error {
-			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.MCP == nil || actions.SetMCP == nil || actions.Copy == nil || actions.SetEnabled == nil || actions.Connections == nil {
+			if title != "Portway" || actions.Show == nil || actions.Quit == nil || actions.Directory == nil || actions.Logs == nil || actions.MCP == nil || actions.SetMCP == nil || actions.Copy == nil || actions.SetEnabled == nil || actions.Restart == nil || actions.Wake == nil || actions.Connections == nil {
 				t.Fatal("missing native title or menu actions")
 			}
 			if a.service == nil {

@@ -13,6 +13,8 @@ type TrayActions struct {
 	SetMCP      func(bool)
 	Copy        func(string)
 	SetEnabled  func(string, bool)
+	Restart     func(string)
+	Wake        func()
 	Connections func(string, bool)
 }
 
@@ -42,7 +44,7 @@ func MenuLabels(language, title string) map[string]string {
 	if language == "en" {
 		return map[string]string{"open": "Open " + title, "directory": "Open Configuration Folder", "quit": "Quit " + title, "mcp": "MCP", "openMCP": "Open MCP Settings", "startMCP": "Start MCP", "stopMCP": "Stop MCP",
 			"logs": "Open Logs", "copyProxy": "Copy Proxy URL", "copyCommand": "Copy Proxy Command",
-			"startTunnel": "Start Tunnel", "stopTunnel": "Stop Tunnel", "working": "Working...",
+			"startTunnel": "Start Tunnel", "stopTunnel": "Stop Tunnel", "restartTunnel": "Restart Tunnel", "working": "Working...",
 			"connections": "View Connections",
 			"about":       "About " + title, "hide": "Hide " + title, "hideOthers": "Hide Others", "showAll": "Show All",
 			"edit": "Edit", "undo": "Undo", "redo": "Redo", "cut": "Cut", "copy": "Copy", "paste": "Paste",
@@ -54,7 +56,7 @@ func MenuLabels(language, title string) map[string]string {
 	}
 	return map[string]string{"open": "打开 " + title, "directory": "打开配置目录", "quit": "退出 " + title, "mcp": "MCP", "openMCP": "打开 MCP 设置", "startMCP": "启动 MCP", "stopMCP": "停止 MCP",
 		"logs": "打开日志", "copyProxy": "复制代理地址", "copyCommand": "复制代理命令",
-		"startTunnel": "启动线路", "stopTunnel": "停止线路", "working": "处理中…",
+		"startTunnel": "启动线路", "stopTunnel": "停止线路", "restartTunnel": "重启线路", "working": "处理中…",
 		"connections": "查看连接",
 		"about":       "关于 " + title, "hide": "隐藏 " + title, "hideOthers": "隐藏其他", "showAll": "显示全部",
 		"edit": "编辑", "undo": "撤销", "redo": "重做", "cut": "剪切", "copy": "复制", "paste": "粘贴",
