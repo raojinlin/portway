@@ -1,11 +1,9 @@
 package tunnel
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
-	"syscall"
 )
 
 func listenProxy(address string, firstPort int) (net.Listener, error) {
@@ -17,7 +15,7 @@ func listenProxy(address string, firstPort int) (net.Listener, error) {
 		if err == nil {
 			return ln, nil
 		}
-		if !errors.Is(err, syscall.EADDRINUSE) {
+		if !isUnavailableProxyPort(err) {
 			return nil, fmt.Errorf("listen on proxy port %d: %w", port, err)
 		}
 	}
